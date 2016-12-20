@@ -630,24 +630,24 @@ This physics simulator is heavily based on Erin Catto's GDC2009 talk.</br>
 <h2>Simulation loop</h2>
 The simulation loop looks like this:</br>
 <ul>
-<li>Integration: Computes tentative velocities: $$v_{tentative} = v_i + a \cdot t $$</li> 
-<li>Constraints enforcement: Corrects tentative velocities so they meet the constraints, for this we need to figure out how the constraint looks like in order to compute the Jacobian. The Jacobian will help us compute the velocity correction. </br></br>The enforcement can be applied in 2 different ways:</li> 
+<li><b>Integration:</b> Computes tentative velocities: $$v_{tentative} = v_i + a \cdot t $$</li> 
+<li><b>Constraints enforcement:</b> Corrects tentative velocities so they meet the constraints, for this we need to figure out how the constraint looks like in order to compute the Jacobian. The Jacobian will help us compute the velocity correction. The Jacobian is a matrix that we'll need to invert. Depending on the solving method this J will be bigger or smaller.</br></br>These are the 2 methods we are using here:</li> 
 <ul>
-<li><b><font color="blue">Simultaneously:</font></font></b> all the 'distance constraints' actuate at once, in this case the Jacobian is a matrix, see the 'Simultaneous solver Jacobian computation', this is slow but precise</li>
-<li><b><font color="red">Sequentially:</font></b> applying 1 'distance constraint' each link of the chain and repeating this a few times. In this case the Jacobian is just a scalar, this is fast but good for games :)</li>
+<li><b><font color="blue">Simultaneously:</font></font></b> all the 'distance constraints' actuate at once, in this case the Jacobian is a big matrix, see the 'Simultaneous solver Jacobian computation', this is slow but precise</li>
+<li><b><font color="red">Sequentially:</font></b> applying 1 'distance constraint' each link of the chain and repeating this a few times. In this case the Jacobian is a tiny matrix, this is fast but good for games :)</li>
 </ul>
 </br>
 In every case we will have to:
 <ul>
 <li>Compute the Jacobian</li>
 <li>Uses a velocity bias to prevent drift/stretching (Baumgarte stabilization): $$b = \frac{\beta}{t} \cdot C$$</li>
-<li>Compute the inverse of ${JM^{-1}J^T}$.</li>
+<li>Compute the inverse of $JM^{-1}J^T$ (this is why we want smaller jacobians).</li>
 <li>Compute lagrange multipliers (anything that multiplies a derivative that points in the direction we want is called a lagrange multiplier, this is just to scare people).</li>
 $$\lambda = -\frac{J \cdot v_{tentative} + b}{JM^{-1}J^T}$$
 <li>And the velocity gets corrected(so it meets the constraints) by applying:</li>
 $$v_f = v_{tentative} + \lambda J^T$$
 </ul>
-<li>Draw particles/links.</li> 
+<li><b>Rendering:</b> Draws particles and links.</li> 
 </ul>
 </br>
 

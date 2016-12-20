@@ -14,7 +14,8 @@ function add(a,b) { return new Vector(a.x+b.x, a.y+b.y); }
 function sub(a,b) { return new Vector(a.x-b.x, a.y-b.y); }
 function mul(a,b) { return new Vector(a.x*b, a.y *b); }
 function dot(a,b) { return a.x*b.x+a.y*b.y; }
-function length(a) { return Math.sqrt(dot(a,a)); }
+function norm2(a) { return dot(a,a); }
+function length(a) { return Math.sqrt(norm2(a,a)); }
 function norm(a) { return mul(a, 1.0/length(a)); }
 
 //drawing helpers
@@ -205,9 +206,6 @@ function PendulumIsingScalars(top, body)
     
     //update speeds
     v[body] = sub( v[body], Jtlambda);
-    
-    //draw chain
-    drawLine( top, p[body])
 }
 
 //
@@ -227,16 +225,18 @@ function SinglePendulum(top, body)
     velT[0] = [ v[body] ];
          
     //compute bias
-    var bias = undefined;
+    var distance = 10*10+10*10;
+    var betaoverh = .1/.1;
+    
+    var bias = [[]];        
+    bias[0].push( betaoverh * .5*(norm2(sub(p[body], top)) - distance));
+    var biasT = TransposeMat(bias);    
 
     //solver
     var Jtlambda = GetJtlambda(J, velT, bias)
     
     //update speeds
     v[body] = sub(v[body], Jtlambda[0][0]);      
-    
-    //draw chain
-    drawLine( top, p[body])
 }
 
 //
@@ -264,15 +264,7 @@ function DoublePendulum(top, body1, body2)
        
     //update speeds
     v[body1] = sub(v[body1], Jtlambda[0][0]);
-    v[body2] = sub(v[body2], Jtlambda[1][0]);
-    
-    //draw P_c
-    drawLine( p[body1], add(p[body1],mul(Jtlambda[0][0],-100)) )
-    drawLine( p[body2], add(p[body2],mul(Jtlambda[1][0],-100)) )
-    
-    //draw chain
-    drawLine( top, p[body1])
-    drawLine( p[body1], p[body2])
+    v[body2] = sub(v[body2], Jtlambda[1][0]);   
 }
 
 //
@@ -302,12 +294,7 @@ function TriplePendulum(top, body1, body2, body3)
     //update speeds
     v[body1] = sub(v[body1], Jtlambda[0][0]);
     v[body2] = sub(v[body2], Jtlambda[1][0]);
-    v[body3] = sub(v[body3], Jtlambda[2][0]);
-    
-    //draw chain
-    drawLine( p[body1], add(p[body1],mul(Jtlambda[0][0],-100)) )
-    drawLine( p[body2], add(p[body2],mul(Jtlambda[1][0],-100)) )
-    drawLine( p[body3], add(p[body3],mul(Jtlambda[2][0],-100)) )
+    v[body3] = sub(v[body3], Jtlambda[2][0]);   
 }
 
 // 
@@ -316,7 +303,7 @@ function TriplePendulum(top, body1, body2, body3)
 //      bodies: list of particle index
 //      top: coordinates of the top of the chain
 //
-function NPendulum(top, bodies)
+function NPendulum(TopChain, bodies)
 {
     //compute jacobian
     var J = []   
@@ -326,7 +313,7 @@ function NPendulum(top, bodies)
         for(var i=0;i<bodies.length;i++)
         {
             if (i==0 && j==0)
-                J[j].push(sub(p[bodies[i]], top));
+                J[j].push(sub(p[bodies[i]], TopChain));
             else if (i==j)
                 J[j].push(sub(p[bodies[i]], p[bodies[i-1]]));
             else if (i==j-1)
@@ -347,12 +334,10 @@ function NPendulum(top, bodies)
     var betaoverh = .1/.1;
     var bias = [[]];
     
-    var diff = sub( p[bodies[0]], top);
-    bias[0].push( betaoverh * .5*(dot(diff,diff) - distance));
+    bias[0].push( betaoverh * .5*(norm2(sub( p[bodies[0]], TopChain)) - distance));
     for(var i=1;i<bodies.length;i++)
     {
-        var diff = sub( p[bodies[i-1]], p[bodies[i]]);
-        bias[0].push( betaoverh * .5 * (dot(diff,diff) - distance));
+        bias[0].push( betaoverh * .5 * (norm2(sub( p[bodies[i-1]], p[bodies[i]])) - distance));
     }   
     var biasT = TransposeMat(bias);    
 
@@ -362,11 +347,11 @@ function NPendulum(top, bodies)
     //update speeds
     for(var i=0;i<bodies.length;i++)
         v[bodies[i]] = sub(v[bodies[i]], Jtlambda[i][0]);
-
+        
     //draw connections
-    drawLine( top, p[bodies[0]])
+    drawLine( TopChain, p[bodies[0]])
     for(var i=1;i<bodies.length;i++)    
-        drawLine( p[bodies[i-1]], p[bodies[i]]);
+       drawLine( p[bodies[i-1]], p[bodies[i]]);        
 }
 
 //
@@ -392,21 +377,40 @@ function draw()
     integrate(.1);    
     
     var TopChain = new Vector(300,0);
-    PendulumIsingScalars(TopChain, 0);
+    //PendulumIsingScalars(TopChain, 0);
     //SinglePendulum(TopChain, 0);
     //DoublePendulum(TopChain, 0, 1);
     //TriplePendulum(TopChain, 0, 1, 2);
-    /*
+
     var bodies = []
     for(var i=0;i<p.length;i++)
-        bodies.push(i)
-    NPendulum(TopChain, bodies)
-    */
-    for(var i=0;i<p.length;i++)
     {
-        drawSphere(context, p[i], r[i]);
+        bodies.push(i)
     }
         
+    if (1)
+    {        
+        NPendulum(TopChain, bodies)
+    }
+    else
+    {
+        for(var iter=0;iter<10;iter++)
+        {
+            SinglePendulum(TopChain, bodies[0]);
+            for(var i=1;i<bodies.length;i++)
+            {
+                SinglePendulum(p[bodies[i-1]], i);
+            }
+        }
+    }        
+    
+    //draw particles
+    for(var i=0;i<bodies.length;i++)
+    {
+        var b=bodies[i];
+        drawSphere(context, p[b], r[b]);
+    }
+       
 }
     
 //

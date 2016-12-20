@@ -374,7 +374,7 @@ function DistanceConstraint(body1, body2)
    
     //compute bias
     var distance = 10*10+10*10;
-    var betaoverh = .2/intergrationStep;
+    var betaoverh = .5/intergrationStep;
     var C = .5 * (norm2(sub( p[body1], p[body2])) - distance);
     var bias = [[betaoverh * C]];
 
@@ -502,34 +502,19 @@ function ComputeCollsions()
     return colliders;
 }
 
+var time = 0;
+var chain1 = []
+
 
 function draw()
 {   
+    time++;
     contacts = []
     
     //compute tentative velocities
     integrate(intergrationStep);    
-    
-    //point where teh chain in hanging from
-    var TopChain = new Vector(300,0);
-    //PendulumIsingScalars(TopChain, 0);
-    //SinglePendulum(TopChain, 0);
-    //DoublePendulum(TopChain, 0, 1);
-    //TriplePendulum(TopChain, 0, 1, 2);
-   
+      
     //apply constraints
-    var chain1 = []
-    for(var i=0;i<p.length/2;i++)
-    {
-        chain1.push(i)
-    }
-
-    var chain2 = []   
-    for(var i=p.length/2;i<p.length;i++)
-    {
-        chain2.push(i)
-    }
-
     var iterations = 10;
 
 
@@ -551,18 +536,14 @@ function draw()
         }
         
         
-        var TopChain1 = new Vector(300+50,0);
+        var TopChain1 = new Vector(50,100);
+        var TopChain2 = new Vector(550,100);
+        
         SinglePendulum(TopChain1, chain1[0]);
+        SinglePendulum(TopChain2, chain1[chain1.length-1]);
         for(var i=1;i<chain1.length;i++)
         {
             DistanceConstraint(chain1[i-1], chain1[i]);
-        }            
-
-        var TopChain2 = new Vector(300-50,0);
-        SinglePendulum(TopChain2, chain2[0]);
-        for(var i=1;i<chain2.length;i++)
-        {
-            DistanceConstraint(chain2[i-1], chain2[i]);
         } 
            
 
@@ -579,10 +560,9 @@ function draw()
     }       
 
     //draw chain2
-    for(var i=0;i<chain2.length;i++)
+    for(var i=chain1.length;i<p.length;i++)
     {
-        var b=chain2[i];
-        drawSphere(context, p[b], r[b], "#ff0000");
+        drawSphere(context, p[i], r[i], "#ff0000");
     }       
 }
     
@@ -684,28 +664,29 @@ function invertMat(M){
 
 function init()
 {
-    var vv = 30;
+    var vv = 40;
     
+    for(var i=0;i<vv;i++)
+    {
+        p.push(new Vector(50+(i+1)*10,100));
+        v.push(new Vector(0,0));
+        r.push(5);
+        
+        chain1.push(i)
+    }
+
     //create some particles
-    for(var i=0;i<vv;i++)
+    for(var i=0;i<100;i++)
     {
-        p[i] = new Vector(300+50+(i+1)*10,(i+1)*10);
-        v[i] = new Vector(0,0);
-        r[i] = 5;
+        p.push(new Vector(150,-i*10) );
+        v.push(new Vector(0,0));
+        r.push(5);
+        
+        p.push(new Vector(150+15,-i*10) );
+        v.push(new Vector(0,0));
+        r.push(5);       
     }
 
-    for(var i=0;i<vv;i++)
-    {
-        ii = vv+i;
-        //p[ii] = new Vector(300-50-(i+1)*10,(i+1)*10);
-        p[ii] = new Vector(300-50-(i+1)*Math.sqrt(200),0);
-        v[ii] = new Vector(0,0);
-        r[ii] = 5;
-    }
-
-    p[0] = new Vector(300,200-5);
-    v[0] = new Vector(0,0);
-    r[0] = 5;
 
     setInterval(draw,10); 
 }
@@ -743,15 +724,16 @@ h1 { display:block; width:600px; margin:20px auto; padding-bottom:20px; font:nor
 </style>
 </head>
 <body onload="init()">
-<h1>Chain simulation (sequential vs simultaneous solver)</h1>
+<h1>Contact constraint (sequential solver)</h1>
 <div id="container">
 	
 <canvas id="myCanvas" width="600" height="300"></canvas>
 
 <h2>Intro</h2>
 
-This is a quick exercise to learn how constraints work in a physics simulator. The best way to learn something is to teach it, so here I go.</br>
+This is a quick exercise to learn how constraints work in a physics simulator. This sample is using inequality constraints for the contact contacts</br>
 </br>
+
 This physics simulator is heavily based on Erin Catto's GDC2009 talk.</br>
 </br>
 </br>

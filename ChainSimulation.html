@@ -6,6 +6,8 @@ var pi = 3.14159265359;
 var v = [];
 var p = [];
 var r = [];
+var intergrationStep = 0.01;
+
 
 //Vector class + math
 function Vector(x,y) { this.x = x; this.y = y; }
@@ -226,7 +228,7 @@ function SinglePendulum(top, body)
          
     //compute bias
     var distance = 10*10+10*10;
-    var betaoverh = .1/.1;
+    var betaoverh = .1/intergrationStep;
     
     var bias = [[]];        
     bias[0].push( betaoverh * .5*(norm2(sub(p[body], top)) - distance));
@@ -236,7 +238,7 @@ function SinglePendulum(top, body)
     var Jtlambda = GetJtlambda(J, velT, bias)
     
     //update speeds
-    v[body] = sub(v[body], Jtlambda[0][0]);      
+    v[body] = sub(v[body], Jtlambda[0][0]);   
 }
 
 //
@@ -249,7 +251,7 @@ function DoublePendulum(top, body1, body2)
 {
     //compute jacobian
     var J = []
-    J[0] = [ sub(p[body1],top), new Vector(0,0) ];
+    J[0] = [ sub(p[body1], top), new Vector(0,0) ];
     J[1] = [ sub(p[body1], p[body2]), sub(p[body2], p[body1]) ];
 
     //compute vels
@@ -331,7 +333,7 @@ function NPendulum(TopChain, bodies)
 
     //compute bias
     var distance = 10*10+10*10;
-    var betaoverh = .1/.1;
+    var betaoverh = .1/intergrationStep;
     var bias = [[]];
     
     bias[0].push( betaoverh * .5*(norm2(sub( p[bodies[0]], TopChain)) - distance));
@@ -374,33 +376,39 @@ function draw()
     
     contacts = []
     
-    integrate(.1);    
+    //compute tentative velocities
+    integrate(intergrationStep);    
     
+    //point where teh chain in hanging from
     var TopChain = new Vector(300,0);
     //PendulumIsingScalars(TopChain, 0);
     //SinglePendulum(TopChain, 0);
     //DoublePendulum(TopChain, 0, 1);
     //TriplePendulum(TopChain, 0, 1, 2);
 
+    //list with all teh bodies that form the chain 
     var bodies = []
     for(var i=0;i<p.length;i++)
     {
         bodies.push(i)
     }
-        
+    
+  
     if (1)
     {        
+        //simultaneous solver
         NPendulum(TopChain, bodies)
     }
     else
     {
-        for(var iter=0;iter<10;iter++)
+        //iterative solver
+        for(var iter=0;iter<30;iter++)
         {
             SinglePendulum(TopChain, bodies[0]);
             for(var i=1;i<bodies.length;i++)
             {
-                SinglePendulum(p[bodies[i-1]], i);
-            }
+                SinglePendulum(p[bodies[i-1]], bodies[i]);
+            }            
         }
     }        
     
@@ -409,8 +417,7 @@ function draw()
     {
         var b=bodies[i];
         drawSphere(context, p[b], r[b]);
-    }
-       
+    }       
 }
     
 //
@@ -509,15 +516,18 @@ function invertMat(M){
     return I;
 }    
 
-//create 15 particles
-for(var i=0;i<20;i++)
+function init()
 {
-    p[i] = new Vector(300+(i+1)*10,(i+1)*10);
-    v[i] = new Vector(0,0);
-    r[i] = 5;
-}
+    //create some particles
+    for(var i=0;i<20;i++)
+    {
+        p[i] = new Vector(300+(i+1)*10,(i+1)*10);
+        v[i] = new Vector(0,0);
+        r[i] = 5;
+    }
 
-setInterval(draw,10); 
+    setInterval(draw,10); 
+}
 </script>
 
 <!DOCTYPE html>
@@ -543,33 +553,62 @@ h1 { display:block; width:600px; margin:20px auto; padding-bottom:20px; font:nor
 -->
 </style>
 </head>
-<body>
+<body onload="init()">
 <h1>Chain simulation using equality constraints</h1>
 <div id="container">
 	
 <canvas id="myCanvas" width="600" height="300"></canvas>
-Features:</br>
+
+<h2>Intro</h2>
+
+This is a quick exercise to learn how constraints work in a physics simulator. The best way to learn something is to tech it, so here is go.</br>
+</br>
+This physics simulator is heavily based on Erin Catto's GDC2009 talk.</br>
+</br>
+
+<h2>Simulation loop</h2>
+The simulation loop looks like this:</br>
 <ul>
-<li>Computes the Jacobian of the whole chain.</li>
-<li>Uses a velocity bias to prevent drift/stretching</li>
-<li>Use a constraint solver to compute the lagrange multipliers.</li>
+<li>Integration: computes tentative velocities: $v_{tentative} = v_i + a \cdot t$.</li> 
+<li>Constraints enforcement: Corrects tentative velocities so they meet the constraints, this is done by applying to each particle the impulse of every constraint:</li> 
+<ul>
+<li>Computes the Jacobian of the *whole* chain. See below how to compute it</li>
+<li>Uses a velocity bias to prevent drift/stretching (Baumgarte stabilization)</li>
+<li>Computes the inverse of ${JM^{-1}J^T}$.</li>
+<li>computes lagrange multipliers (anything that multiplies a derivative that points in the direction we want is called a lagrange multiplier, this is just to scare people).</li>
+$$\lambda = -\frac{J \cdot v_{tentative} + b}{JM^{-1}J^T}$$
+<li>And the velocity gets corrected(so it meets the constraints) by applying:</li>
+$$v_f = v_{tentative} + \lambda J^T$$
+</ul>
+<li>Repeat.</li> 
+
 </ul>
 
-Let see how to compute the Jacobian, for a 4 element chain the constraints are:
-$$\begin{align}C_1(p1,p2,p3,p4)=& .5 \cdot |p_1|^2 -d^2 =0 \\
+<h2>Jacobian computation</h2>
+For a 4 element chain the constraints are:
+$$\begin{align}C_1(p1,p2,p3,p4)=& .5 \cdot |p_1-hook|^2 -d^2 =0 \\
 C_2(p1,p2,p3,p4)=& .5 \cdot |p_1-p_2|^2 -d^2 =0 \\
 C_3(p1,p2,p3,p4)=& .5 \cdot |p_2-p_3|^2 -d^2 =0 \\
 C_4(p1,p2,p3,p4)=& .5 \cdot |p_3-p_4|^2 -d^2 =0 \\
 \end{align}$$
+Where:
+<ul>
+<li>$hook$ is the point were the chain hangs from.</li>
+<li>$p_i$ are the position of each particle.</li>
+<li>$d$ is the distance of each link.</li>
+</ul>
 </br>
 For each $C_i$ we need to compute $\frac{dC_i}{dt}$, using the total derivative and the chain rule we have that:
 $$\frac{dC_i}{dt}=\frac{\partial C_i}{\partial p_1}\cdot\frac{dp_1}{dt} + \frac{\partial C_i}{\partial p_3}\cdot\frac{dp_3}{dt} + \frac{\partial C_i}{\partial p_4}\cdot\frac{dp_4}{dt}$$
+Where:
+$$\frac{\partial C_i}{\partial p_1} = \frac{\partial (p_i-p_{i-1})^2 }{\partial p_i} = 2 \cdot (p_i-p_{i-1}) \qquad\text{and}\qquad \frac{dp_i}{dt} = v_i$$
+
 This produces the following:
 $$\begin{array}{rr}
-\frac{dC_1}{dt}=&      p_1\cdot{v_1}& +          0\cdot v_2& +         0\cdot v_3& +        0\cdot v_4& \\
+\frac{dC_1}{dt}=&(p_1-hook)\cdot{v_1}& +          0\cdot v_2& +         0\cdot v_3& +        0\cdot v_4& \\
 \frac{dC_2}{dt}=& (p_1-p_2)\cdot{v_1}& - (p_1-p_2)\cdot v_2& +         0\cdot v_3& +        0\cdot v_4& \\
-\frac{dC_3}{dt}=&          0\cdot v_1& + (p_1-p_2)\cdot v_2& - (p_1-p_2)\cdot v_3& +        0\cdot v_4& \\
-\frac{dC_4}{dt}=&          0\cdot v_1& +         0\cdot v_2& + (p_1-p_2)\cdot v_3& -(p_1-p_2)\cdot v_4& \\
+\frac{dC_3}{dt}=&          0\cdot v_1& + (p_2-p_3)\cdot v_2& - (p_2-p_3)\cdot v_3& +        0\cdot v_4& \\
+\frac{dC_4}{dt}=&          0\cdot v_1& +         0\cdot v_2& + (p_3-p_4)\cdot v_3& -(p_3-p_4)\cdot v_4& \\
 \end{array}$$
 
 Which in a matrix form it looks like this:
@@ -580,11 +619,6 @@ $$\begin{pmatrix}p_1 & 0 & 0 & 0 \\
 \end{pmatrix} \cdot \begin{pmatrix} v_1 \\ v_2 \\ v_3 \\ v_4\end{pmatrix}$$
 
 The matrix on the left is called the Jacobian. It is use in the followin formula to compute the lambdas (lagrange multipliers).
-
-$$\lambda = \frac{J \cdot v + b}{JM^-1J^T}$$
-
-And the velocity gets corrected(so it meets the constraints) by applying:
-$$v_f = v \cdot \lambda J^T$$
 
 <ul id="nav">
 </ul>

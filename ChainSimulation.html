@@ -6,7 +6,7 @@ var pi = 3.14159265359;
 var v = [];
 var p = [];
 var r = [];
-var intergrationStep = 0.01;
+var intergrationStep = 0.1;
 
 
 //Vector class + math
@@ -573,7 +573,6 @@ This is a quick exercise to learn how constraints work in a physics simulator. T
 </br>
 This physics simulator is heavily based on Erin Catto's GDC2009 talk.</br>
 </br>
-
 <h2>Simulation loop</h2>
 The simulation loop looks like this:</br>
 <ul>
@@ -589,8 +588,8 @@ $$\lambda = -\frac{J \cdot v_{tentative} + b}{JM^{-1}J^T}$$
 $$v_f = v_{tentative} + \lambda J^T$$
 </ul>
 <li>Draw particles/links.</li> 
-
 </ul>
+</br>
 
 <h2>Jacobian computation</h2>
 For a 4 element chain the constraints are:
@@ -626,10 +625,12 @@ $$\begin{pmatrix}p_1 & 0 & 0 & 0 \\
 0 & 0 & (p_3-p_4) & -(p_3-p_4) \\
 \end{pmatrix} \cdot \begin{pmatrix} v_1 \\ v_2 \\ v_3 \\ v_4\end{pmatrix}$$
 
-The matrix on the left is called the Jacobian. It is use in the followin formula to compute the lambdas (lagrange multipliers).
-
+The matrix on the left is the Jacobian.</br>
+</br>
 <h2>Contact/Questions:</h2>
  &lt;my_github_account_username&gt;$@gmail.com$.
+</br>
+</br>
 </div>
 
 

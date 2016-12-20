@@ -561,7 +561,7 @@ h1 { display:block; width:600px; margin:20px auto; padding-bottom:20px; font:nor
 
 <h2>Intro</h2>
 
-This is a quick exercise to learn how constraints work in a physics simulator. The best way to learn something is to tech it, so here is go.</br>
+This is a quick exercise to learn how constraints work in a physics simulator. The best way to learn something is to tech it, so here I go.</br>
 </br>
 This physics simulator is heavily based on Erin Catto's GDC2009 talk.</br>
 </br>
@@ -569,18 +569,18 @@ This physics simulator is heavily based on Erin Catto's GDC2009 talk.</br>
 <h2>Simulation loop</h2>
 The simulation loop looks like this:</br>
 <ul>
-<li>Integration: computes tentative velocities: $v_{tentative} = v_i + a \cdot t$.</li> 
+<li>Integration: Computes tentative velocities: $$v_{tentative} = v_i + a \cdot t $$</li> 
 <li>Constraints enforcement: Corrects tentative velocities so they meet the constraints, this is done by applying to each particle the impulse of every constraint:</li> 
 <ul>
 <li>Computes the Jacobian of the *whole* chain. See below how to compute it</li>
-<li>Uses a velocity bias to prevent drift/stretching (Baumgarte stabilization)</li>
+<li>Uses a velocity bias to prevent drift/stretching (Baumgarte stabilization): $$b = \frac{\beta}{t} \cdot C$$</li>
 <li>Computes the inverse of ${JM^{-1}J^T}$.</li>
 <li>computes lagrange multipliers (anything that multiplies a derivative that points in the direction we want is called a lagrange multiplier, this is just to scare people).</li>
 $$\lambda = -\frac{J \cdot v_{tentative} + b}{JM^{-1}J^T}$$
 <li>And the velocity gets corrected(so it meets the constraints) by applying:</li>
 $$v_f = v_{tentative} + \lambda J^T$$
 </ul>
-<li>Repeat.</li> 
+<li>Draw particles/links.</li> 
 
 </ul>
 

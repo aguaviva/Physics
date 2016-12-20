@@ -503,7 +503,8 @@ function ComputeCollsions()
 }
 
 var time = 0;
-var chain1 = []
+var hammokParticles = []
+var redParticles = []
 
 
 function draw()
@@ -539,11 +540,11 @@ function draw()
         var TopChain1 = new Vector(50,100);
         var TopChain2 = new Vector(550,100);
         
-        SinglePendulum(TopChain1, chain1[0]);
-        SinglePendulum(TopChain2, chain1[chain1.length-1]);
-        for(var i=1;i<chain1.length;i++)
+        SinglePendulum(TopChain1, hammokParticles[0]);
+        SinglePendulum(TopChain2, hammokParticles[hammokParticles.length-1]);
+        for(var i=1;i<hammokParticles.length;i++)
         {
-            DistanceConstraint(chain1[i-1], chain1[i]);
+            DistanceConstraint(hammokParticles[i-1], hammokParticles[i]);
         } 
            
 
@@ -553,16 +554,17 @@ function draw()
 	context.clearRect(0,0,600,300);
    
     //draw chain1
-    for(var i=0;i<chain1.length;i++)
+    for(var i=0;i<hammokParticles.length;i++)
     {
-        var b=chain1[i];
+        var b=hammokParticles[i];
         drawSphere(context, p[b], r[b], "#0000ff");
     }       
 
     //draw chain2
-    for(var i=chain1.length;i<p.length;i++)
+    for(var i=0;i<redParticles.length;i++)
     {
-        drawSphere(context, p[i], r[i], "#ff0000");
+        var b=redParticles[i];
+        drawSphere(context, p[b], r[b], "#ff0000");
     }       
 }
     
@@ -665,14 +667,15 @@ function invertMat(M){
 function init()
 {
     var vv = 40;
-    
+
+    // create particles for the hammok
     for(var i=0;i<vv;i++)
     {
         p.push(new Vector(50+(i+1)*10,100));
         v.push(new Vector(0,0));
         r.push(5);
         
-        chain1.push(i)
+        hammokParticles.push(p.length-1)
     }
 
     //create some particles
@@ -681,10 +684,12 @@ function init()
         p.push(new Vector(150,-i*10) );
         v.push(new Vector(0,0));
         r.push(5);
+        redParticles.push(p.length-1)
         
         p.push(new Vector(150+15,-i*10) );
         v.push(new Vector(0,0));
-        r.push(5);       
+        r.push(5);     
+        redParticles.push(p.length-1)        
     }
 
 

@@ -21,10 +21,10 @@ function length(a) { return Math.sqrt(norm2(a,a)); }
 function norm(a) { return mul(a, 1.0/length(a)); }
 
 //drawing helpers
-function drawSphere(context, p, radius)
+function drawSphere(context, p, radius, color)
 {
 	context.beginPath();
-	context.fillStyle="#0000ff";
+	context.fillStyle=color;
 	context.arc(p.x,p.y,radius,0,Math.PI*2,true);
 	context.closePath();
 	context.fill();
@@ -183,7 +183,7 @@ function GetJtlambda(J, velT, bias)
 //      body: particle  index
 //      top: coordinates of the top of the chain
 //
-function PendulumIsingScalars(top, body)
+function PendulumUsingScalars(top, body)
 {   
     //compute jacobian 
     var J = sub(p[body],top);
@@ -228,10 +228,11 @@ function SinglePendulum(top, body)
          
     //compute bias
     var distance = 10*10+10*10;
-    var betaoverh = .1/intergrationStep;
+    var betaoverh = .2/intergrationStep;
+    var C = .5*(norm2(sub(p[body], top)) - distance);
     
     var bias = [[]];        
-    bias[0].push( betaoverh * .5*(norm2(sub(p[body], top)) - distance));
+    bias[0].push( betaoverh * C);
     var biasT = TransposeMat(bias);    
 
     //solver
@@ -333,7 +334,7 @@ function NPendulum(TopChain, bodies)
 
     //compute bias
     var distance = 10*10+10*10;
-    var betaoverh = .1/intergrationStep;
+    var betaoverh = .2/intergrationStep;
     var bias = [[]];
     
     bias[0].push( betaoverh * .5*(norm2(sub( p[bodies[0]], TopChain)) - distance));
@@ -354,6 +355,35 @@ function NPendulum(TopChain, bodies)
     drawLine( TopChain, p[bodies[0]])
     for(var i=1;i<bodies.length;i++)    
        drawLine( p[bodies[i-1]], p[bodies[i]]);        
+}
+
+//
+//  Distance constraint, note how the jacobian is a small matrix
+//  Inputs:
+//      body1, body2: particle  index
+//
+function DistanceConstraint(body1, body2)
+{
+    //compute jacobian
+    var J = []
+    J[0] = [ sub(p[body1], p[body2]), sub(p[body2], p[body1]) ];
+
+    //compute vels
+    var vel = [[ v[body1], v[body2] ]];
+    var velT = TransposeMat(vel);
+   
+    //compute bias
+    var distance = 10*10+10*10;
+    var betaoverh = .2/intergrationStep;
+    var C = .5 * (norm2(sub( p[body1], p[body2])) - distance);
+    var bias = [[betaoverh * C]];
+
+    //solver
+    var Jtlambda = GetJtlambda(J, velT, bias)
+       
+    //update speeds
+    v[body1] = sub(v[body1], Jtlambda[0][0]);
+    v[body2] = sub(v[body2], Jtlambda[1][0]);   
 }
 
 //
@@ -387,36 +417,51 @@ function draw()
     //TriplePendulum(TopChain, 0, 1, 2);
 
     //list with all teh bodies that form the chain 
-    var bodies = []
-    for(var i=0;i<p.length;i++)
+    var chain1 = []
+    for(var i=0;i<p.length/2;i++)
     {
-        bodies.push(i)
+        chain1.push(i)
     }
+
+    var chain2 = []
+    for(var i=p.length/2;i<p.length;i++)
+    {
+        chain2.push(i)
+    }
+
     
-  
-    if (1)
+    //apply constraints
+
     {        
         //simultaneous solver
-        NPendulum(TopChain, bodies)
+        NPendulum(TopChain, chain1)
     }
-    else
+    
     {
         //iterative solver
-        for(var iter=0;iter<30;iter++)
+        for(var iter=0;iter<10;iter++)
         {
-            SinglePendulum(TopChain, bodies[0]);
-            for(var i=1;i<bodies.length;i++)
+            SinglePendulum(TopChain, chain2[0]);
+            //PendulumUsingScalars(TopChain, bodies[0]);
+            for(var i=1;i<chain2.length;i++)
             {
-                SinglePendulum(p[bodies[i-1]], bodies[i]);
+                DistanceConstraint(chain2[i-1], chain2[i]);
             }            
         }
     }        
     
-    //draw particles
-    for(var i=0;i<bodies.length;i++)
+    //draw chain1
+    for(var i=0;i<chain1.length;i++)
     {
-        var b=bodies[i];
-        drawSphere(context, p[b], r[b]);
+        var b=chain1[i];
+        drawSphere(context, p[b], r[b], "#0000ff");
+    }       
+
+    //draw chain2
+    for(var i=0;i<chain2.length;i++)
+    {
+        var b=chain2[i];
+        drawSphere(context, p[b], r[b], "#ff0000");
     }       
 }
     
@@ -526,6 +571,15 @@ function init()
         r[i] = 5;
     }
 
+    for(var i=0;i<20;i++)
+    {
+        ii = 20+i;
+        p[ii] = new Vector(300+(i+1)*10,(i+1)*10);
+        v[ii] = new Vector(0,0);
+        r[ii] = 5;
+    }
+
+
     setInterval(draw,10); 
 }
 </script>
@@ -577,12 +631,18 @@ This physics simulator is heavily based on Erin Catto's GDC2009 talk.</br>
 The simulation loop looks like this:</br>
 <ul>
 <li>Integration: Computes tentative velocities: $$v_{tentative} = v_i + a \cdot t $$</li> 
-<li>Constraints enforcement: Corrects tentative velocities so they meet the constraints, this is done by applying to each particle the impulse of every constraint:</li> 
+<li>Constraints enforcement: Corrects tentative velocities so they meet the constraints, for this we need to figure out how the constraint looks like in order to compute the Jacobian. The Jacobian will help us compute the velocity correction. </br></br>The enforcement can be applied in 2 different ways:</li> 
 <ul>
-<li>Computes the Jacobian of the *whole* chain. See below how to compute it</li>
+<li><b><font color="blue">Simultaneously:</font></font></b> all the 'distance constraints' actuate at once, in this case the Jacobian is a matrix, see the 'Simultaneous solver Jacobian computation', this is slow but precise</li>
+<li><b><font color="red">Sequentially:</font></b> applying 1 'distance constraint' each link of the chain and repeating this a few times. In this case the Jacobian is just a scalar, this is fast but good for games :)</li>
+</ul>
+</br>
+In every case we will have to:
+<ul>
+<li>Compute the Jacobian</li>
 <li>Uses a velocity bias to prevent drift/stretching (Baumgarte stabilization): $$b = \frac{\beta}{t} \cdot C$$</li>
-<li>Computes the inverse of ${JM^{-1}J^T}$.</li>
-<li>computes lagrange multipliers (anything that multiplies a derivative that points in the direction we want is called a lagrange multiplier, this is just to scare people).</li>
+<li>Compute the inverse of ${JM^{-1}J^T}$.</li>
+<li>Compute lagrange multipliers (anything that multiplies a derivative that points in the direction we want is called a lagrange multiplier, this is just to scare people).</li>
 $$\lambda = -\frac{J \cdot v_{tentative} + b}{JM^{-1}J^T}$$
 <li>And the velocity gets corrected(so it meets the constraints) by applying:</li>
 $$v_f = v_{tentative} + \lambda J^T$$
@@ -591,7 +651,7 @@ $$v_f = v_{tentative} + \lambda J^T$$
 </ul>
 </br>
 
-<h2>Jacobian computation</h2>
+<h2>Simultaneous solver Jacobian computation</h2>
 For a 4 element chain the constraints are:
 $$\begin{align}C_1(p1,p2,p3,p4)=& .5 \cdot |p_1-hook|^2 -d^2 =0 \\
 C_2(p1,p2,p3,p4)=& .5 \cdot |p_1-p_2|^2 -d^2 =0 \\

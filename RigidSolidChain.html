@@ -208,7 +208,7 @@ function TransposeMat(m)
 //
 // Get Jtranspose * lambda
 //
-function GetJtlambda(J, Minv, velT, bias)
+function GetMinvJtlambda(J, Minv, velT, bias)
 {   
     var JvelT = MulMatFF(J, velT); 
 
@@ -228,8 +228,10 @@ function GetJtlambda(J, Minv, velT, bias)
     var lambda = MulMatKK( invJJt, JvelT);
     
     var Jtlambda = MulMatFK( Jt, lambda);
+
+    var MinvJtlambda = MulMatSF(Minv, Jtlambda);
        
-    return Jtlambda;
+    return MinvJtlambda;
 }
 
 //
@@ -239,7 +241,7 @@ function GetJtlambda(J, Minv, velT, bias)
 //
 function DistanceConstraint(bodyA, Pa, bodyB, Pb)
 {
-    //compute jacobian
+    // compute jacobian---------
     var J = []
 
     var PaPb = subV(Pb, Pa);
@@ -256,34 +258,30 @@ function DistanceConstraint(bodyA, Pa, bodyB, Pb)
        
     J[0] = [ new FrameV(mulV(mulV(PaPb,-1),2), 2*Wa), new FrameV(mulV(PaPb,2), 2*Wb) ];
 
-    //document.getElementById("text").innerHTML += "Wa "  + (J[0][0].r).toFixed(2) + "  " + (J[0][1].r).toFixed(2) + "<br>";
-
-    //compute vels
+    // compute vels--------------
     var vel = [[ States[bodyA].v, States[bodyB].v ]];
     var velT = TransposeMat(vel);
    
-    //compute bias
+    // compute bias---------------
     var betaoverh = .5/intergrationStep;
     var C = dotV(PaPb, PaPb);
+    
+    // if the constraint is zero (is met) then bail out, the jacobian is zero and 
+    // obviously it wont have an inverse
     if (C<= 1e-15)
         return;
     
     var bias = [[betaoverh * C]];
 
-    //just the diagonal matrix
+    //just the diagonal matrix -----
     var Minv = [ States[bodyA], States[bodyB] ];
 
-    //solver
-    var Jtlambda = GetJtlambda(J, Minv, velT, bias)
-    
-    var MinvJtlambda = MulMatSF(Minv, Jtlambda);
+    // solver-----------------------
+    var MinvJtlambda = GetMinvJtlambda(J, Minv, velT, bias)    
        
-    //update speeds
+    // update speeds-----------------
     States[bodyA].v = subF(States[bodyA].v, MinvJtlambda[0][0]);
     States[bodyB].v = subF(States[bodyB].v, MinvJtlambda[1][0]);   
-    
-    //document.getElementById("text").innerHTML += "Sa "  + States[bodyA].v.x + "   " + States[bodyA].v.y + "   "+ States[bodyA].v.r + "<br>";
-    //document.getElementById("text").innerHTML += "Sb "  + States[bodyB].v.x + "   " + States[bodyB].v.y + "   "+ States[bodyB].v.r + "<br>";
 }
 
 //
@@ -293,16 +291,32 @@ function integrate(t)
 {
     for(var i=0;i<States.length;i++)
     {
-        States[i].p = addF(States[i].p ,mulF(States[i].v, t));
-        
-        //States[i].v.y += .5;
+        States[i].p = addF(States[i].p ,mulF(States[i].v, t));       
         //States.v[i] = mulV(States.v[i], .98);        
     }
 }
 
 function SimulationLoop()
 {             
-    //apply constraints
+    // render chain
+    {
+        context= myCanvas.getContext('2d');
+        context.clearRect(0,0,600,600);
+
+        for(var i=0;i<States.length;i++)
+        {
+            drawPoly(context, States[i], "#ff0000");
+        }
+    }
+
+    // apply gravity
+    for(var i=1;i<States.length;i++)
+        States[i].v.y+=9.8/10;
+
+    // compute tentative velocities
+    integrate(intergrationStep);  
+
+    // apply constraints
     var iterations = 4;
     for(var iter=0;iter<iterations;iter++)
     {
@@ -314,30 +328,10 @@ function SimulationLoop()
             DistanceConstraint(i, Pa, i+1, Pb)
         }
     }
-
-    //render chain
-    {
-        context= myCanvas.getContext('2d');
-        context.clearRect(0,0,600,600);
-
-        for(var i=0;i<States.length;i++)
-        {
-            drawPoly(context, States[i], "#ff0000");
-        }
-    }
-    
-    //apply gravity
-    for(var i=1;i<States.length;i++)
-        States[i].v.y+=9.8/10;
-
-    //compute tentative velocities
-    integrate(intergrationStep);  
 }
-
 
 function init()
 {
-
     var cubeVerts = [ 
         new Vector(-1,-1),
         new Vector(1,-1),
@@ -346,15 +340,14 @@ function init()
         new Vector(-1,1)
     ];
     
-    
     var linkVerts = [ new Vector(0, -0.5), new Vector(-0.1, -0.3), new Vector(-0.1, 0.3), new Vector(0, 0.5), new Vector(0.1, 0.3), new Vector(0.1, -0.3)];
 
-    //crate hook
+    // create top hook
     var p = new Frame(10,0, 0*pi/180);
     var v = new Frame(0,0, 0);
     States.push( new State(p, v, cubeVerts, 0, 0) );
 
-    //crate chain
+    // create chain
     for(var i=0;i<15;i++)
     {
         var l = Math.sqrt(.5)

@@ -80,96 +80,6 @@ function drawLine( p1,p2)
     context.stroke();
 }
 
-
-function IsPointAboveRectEx(c, p, a, b)
-{
-    var ab = subV(b,a);
-    var n = new Vector(ab.y, -ab.x);
-    var ap = subV(p-a);
-    
-    var depth = DotV(n,ap);
-    if (depth<0)
-    {
-        var tt = DotV(ab,ap);
-        if (tt>0)
-        {
-            ln = lengthV(n);
-            if (tt/ln<ln)
-            {
-                depth /=ln;
-                
-                return [depth, mulV(n,1.0/ln)];
-            }
-        }
-    }
-    
-    return null;
-}
-
-function IsPointAboveRect(p, a, b)
-{
-    var ab = subV(b,a);
-    var n = new Vector(ab.y, -ab.x);
-    var ap = subV(p-a);
-    
-    var depth = DotV(n,ap);
-    return depth;        
-}
-
-function IsPointInsideBody(p, b)
-{
-    var out = 0;
-    var res;
-    for(var j=0;j<b.length;j++)    
-    {
-        res = IsPointAboveRect(p, b[i], b[i+1]);
-        if (res==null)
-            out++;
-    }
-           
-    res = IsPointAboveRect(p, b[b.length-1], b[0]);
-        if (res==null)
-            out++;
-
-    if (out==b.length)  //is out
-        return;
-}
-
-function RectRectCollision(s1, s2)
-{
-    var br1 = [];
-    for(var i=0;i<s1.b.length;i++)
-    {
-        br1[i] = TransFV(s1.p,s1.b[i]);
-    }
-
-    var br2 = [];
-    for(var i=0;i<s2.b.length;i++)
-    {
-        br2[i] = TransFV(s2.p,s2.b[i]);
-    }
-
-
-//hereeeeeeeeeeeeeeee
-    for(var i=0;i<s1.length;i++)    
-    {
-        var out = 0;
-        for(var j=0;j<s2.length;j++)    
-        {
-            var depth = IsPointAboveRect(s2.b[j], s1.b[i], br1[i+1]);
-            if (depth<=0)
-                out+=1<<j;
-        }
-               
-        var depth = IsPointAboveRect(br2[j], br1[br2.length-1], br1[0]);
-
-        if (out==0 && depth>0)  //is out
-            return;
-
-        
-    }
-}
-
 //
 //multiply 2 matrices made out of vectors
 //
@@ -322,63 +232,6 @@ function GetJtlambda(J, Minv, velT, bias)
     return Jtlambda;
 }
 
-// 
-//  N particle pendulum, using a loop to generate J.
-//  Inputs:
-//      bodies: list of particle index
-//      top: coordinates of the top of the chain
-//
-function NPendulum(TopChain, bodies)
-{
-    //compute jacobian
-    var J = []   
-    for(var j=0;j<bodies.length;j++)
-    {
-        J[j] = [];
-        for(var i=0;i<bodies.length;i++)
-        {
-            if (i==0 && j==0)
-                J[j].push(subV(States.p[bodies[i]], TopChain));
-            else if (i==j)
-                J[j].push(subV(States.p[bodies[i]], States.p[bodies[i-1]]));
-            else if (i==j-1)
-                J[j].push(subV(States.p[bodies[j-1]], States.p[bodies[j]]));
-            else
-                J[j].push(new Vector(0,0));
-        }
-    }
-
-    //compute vels
-    var vel = [[]];
-    for(var i=0;i<bodies.length;i++)
-        vel[0].push(States.v[bodies[i]]);       
-    var velT = TransposeMat(vel);
-
-    //compute bias
-    var distance = 10*10+10*10;
-    var betaoverh = .2/intergrationStep;
-    var bias = [[]];
-    
-    bias[0].push( betaoverh * .5*(norm2V(subV( States.p[bodies[0]], TopChain)) - distance));
-    for(var i=1;i<bodies.length;i++)
-    {
-        bias[0].push( betaoverh * .5 * (norm2V(subV( States.p[bodies[i-1]], States.p[bodies[i]])) - distance));
-    }   
-    var biasT = TransposeMat(bias);    
-
-    //solver
-    var Jtlambda = GetJtlambda(J, velT, biasT);
-
-    //update speeds
-    for(var i=0;i<bodies.length;i++)
-        States.v[bodies[i]] = subV(States.v[bodies[i]], Jtlambda[i][0]);
-        
-    //draw connections
-    drawLine( TopChain, States.p[bodies[0]])
-    for(var i=1;i<bodies.length;i++)    
-       drawLine( States.p[bodies[i-1]], States.p[bodies[i]]);        
-}
-
 //
 //  Distance constraint, note how the jacobian is a small matrix
 //  Inputs:
@@ -434,75 +287,6 @@ function DistanceConstraint(bodyA, Pa, bodyB, Pb)
 }
 
 //
-//  Distance constraint, note how the jacobian is a small matrix
-//  Inputs:
-//      bodyA, bodyB: particle  index
-//
-function ContactConstraintBallBall(bodyA, norm2al, bodyB)
-{
-    var PaCa = subV(contact.pA, getPosF(States[contact.bodyA].p));
-    var PbCb = subV(contact.pB, getPosF(States[contact.bodyB].p));
-
-    //compute jacobian
-    var J = []
-    J[0] = [ 
-        new Frame(  contact.N.x,   contact.N.y,  crossVV(PaCa, contact.N)),
-        new Frame( -contact.N.x,  -contact.N.y, -crossVV(PbCb, contact.N))
-    ];
-
-    //compute vels
-    var vel = [[ States[bodyA].v, States[bodyB].v ]];
-    var velT = TransposeMat(vel);
-   
-    //compute bias
-    var betaoverh = .1/intergrationStep;
-    var C = dotV(subV(States[bodyA].p, States[bodyB].p), norm2al) - (r[bodyA]+r[bodyB]);
-
-    //bouncy term
-    var vn = 0;//dotV(subV(States[bodyA].v, States[bodyB].v), norm2al);   
-       
-    var bias = [[betaoverh * C + vn]];
-    
-    //solver
-    var Jtlambda = GetJtlambda(J, velT, bias)
-       
-    //update speeds
-    States[contact.bodyA].v = subF(States[contact.bodyA].v, Jtlambda[0][0]);
-    States[contact.bodyB].v = subF(States[contact.bodyB].v, Jtlambda[1][0]);   
-}
-
-function ContactConstraintBallND(contact)
-{
-    var Ca = getPosF(States[contact.bodyA].p);
-    var PaCa = subV(contact.pA, Ca);
-    var w = crossVV(PaCa, contact.N);
-    //compute jacobian
-    var J = []
-    J[0] = [ 
-        new Frame( contact.N.x,  contact.N.y, w)
-    ];
-
-    //compute vels
-    var vel = [[ States[contact.bodyA].v ]];
-    var velT = TransposeMat(vel);
-   
-    //compute bias
-    var betaoverh = .8/intergrationStep;
-    var C = -contact.depth; 
-
-    //bouncy term
-    var vn = 0;//-0.9*dotV(States[contact.bodyA].fv.p, contact.N);   
-       
-    var bias = [[betaoverh * C + vn]];
-    
-    //solver
-    var Jtlambda = GetJtlambda(J, velT, bias)
-       
-    //update speeds
-    States[contact.bodyA].v = subF(States[contact.bodyA].v, Jtlambda[0][0]);
-}
-
-//
 // Integrate step
 //
 function integrate(t)
@@ -516,65 +300,7 @@ function integrate(t)
     }
 }
 
-function Collision(bodyA, pA, bodyB, pB, N, depth)
-{
-    this.bodyA = bodyA;
-    this.bodyB = bodyB;
-    this.pA = pA;
-    this.pB = pB;
-    this.N = N;
-    this.depth= depth;
-}
-
-function ComputeCollsions()
-{
-    var colliders= [];
-/*
-    //compute collision ball/ball
-    for(var i=0;i<States.length;i++)
-    {
-        for(var j=0;j<i;j++)
-        {
-            var rr = (r[i]+r[j]);
-            var diff = subV(States[i].p, States[j].p);
-            var d = dotV(diff, diff);
-            if (d<rr*rr)
-            {
-                colliders.pA.push(i); 
-                colliders.pB.push(j);
-                colliders.N.push( mulV(diff,1.0/Math.sqrt(d) ) );
-            }
-        }
-    }
-
-    // collisions ball/plane
-    for(var i=0;i<States.length;i++)
-    {
-        if (States[i].p.y+r[i]>300)
-        {
-            colliders.push( new Collision(pA, undefined, new Vector(0,-1) );
-        }
-    }    
-*/    
-    // collisions box/plane
-    for(var i=0;i<States.length;i++)
-    {
-        var b = States[i].b;
-        for(var v=0;v<b.length;v++)
-        {    
-            var p = TransFV(States[i].p, b[v]);
-            var depth = p.y-300;
-            if (depth>0)
-            {
-                colliders.push( new Collision(i, p, undefined, undefined, new Vector(0,-1), depth) );
-            }
-        }    
-    }        
-    
-    return colliders;
-}
-
-function draw()
+function SimulationLoop()
 {             
     //apply constraints
     var iterations = 4;
@@ -623,10 +349,12 @@ function init()
     
     var linkVerts = [ new Vector(0, -0.5), new Vector(-0.1, -0.3), new Vector(-0.1, 0.3), new Vector(0, 0.5), new Vector(0.1, 0.3), new Vector(0.1, -0.3)];
 
+    //crate hook
     var p = new Frame(10,0, 0*pi/180);
     var v = new Frame(0,0, 0);
     States.push( new State(p, v, cubeVerts, 0, 0) );
 
+    //crate chain
     for(var i=0;i<15;i++)
     {
         var l = Math.sqrt(.5)
@@ -635,7 +363,7 @@ function init()
         States.push( new State(p, v, linkVerts, 5, 5) );
     }
   
-    setInterval(draw,10); 
+    setInterval(SimulationLoop,10); 
 }
 
     

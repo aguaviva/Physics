@@ -1,0 +1,767 @@
+<script type="text/javascript">
+var pi = 3.14159265359;
+
+var console = []
+
+//Vector class + math
+function Vector(x,y) { this.x = x; this.y = y; }
+function addV(a,b) { return new Vector(a.x+b.x, a.y+b.y); }
+function subV(a,b) { return new Vector(a.x-b.x, a.y-b.y); }
+function mulV(a,k) { return new Vector(a.x*k, a.y *k); }
+function dotV(a,b) { return a.x*b.x+a.y*b.y; }
+function crossKV(k,v) { return new Vector(-v.y*k, v.x *k); }
+function crossVV(a,b) { return a.x*b.y-a.y*b.x; }
+function norm2V(a) { return dotV(a,a); }
+function lengthV(a) { return Math.sqrt(norm2V(a,a)); }
+function norm(a) { return mulV(a, 1.0/lengthV(a)); }
+function orto(a) { return new Vector( -a.y, a.x); }
+function RotV(a, v) { return new Vector(Math.cos(a)*v.x - Math.sin(a)*v.y, Math.sin(a)*v.x+Math.cos(a)*v.y); }
+function InvRotV(a, v) { return new Vector(Math.cos(a)*v.x + Math.sin(a)*v.y, -Math.sin(a)*v.x+Math.cos(a)*v.y); }
+
+// Frame of reference
+function Frame(x, y, r) { this.x = x; this.y = y; this.r = r; }
+function FrameV(v, r) { this.x = v.x; this.y = v.y; this.r = r; }
+function addF(a,b) { return new Frame(a.x+b.x, a.y+b.y, a.r+b.r); }
+function subF(a,b) { return new Frame(a.x-b.x, a.y-b.y, a.r-b.r); }
+function mulF(a,k) { return new Frame(a.x*k, a.y*k, a.r*k); }
+function dotF(a,b) { return a.x*b.x+a.y*b.y+a.r*b.r; }
+function TransFV(f,p) { return addV(new Vector(f.x, f.y), RotV(f.r, p) ); }
+function InvTransFV(f,p) { return addV(InvRotV(f.r, p), new Vector(f.x, f.y) ); }
+function getPosF(f) { return new Vector(f.x, f.y); }
+
+function CenterMass(lines)
+{
+	var o = new Vector(0,0);
+	for (var i = 0; i < lines.length; i++) 
+		o = addV(o,lines[i])
+	return mulV(o, 1.0/lines.length);
+}
+
+// velocities, positions and radius
+function State(p, v, b, M, I) { this.p = p; this.v = v; this.b = b; this.rb = []; this.M=M; this.I = I;  }
+function getVelS(f, p) { return addV( f.v, crossKV( f.v.r, subV(p,f.p) ) ); }
+function getPosS(f, p) { return TransFV( f.p, p ); }
+
+function Link(b1, p1, b2, p2)
+{
+	this.b1 = b1;
+	this.p1 = p1;
+	this.b2 = b2;
+	this.p2 = p2;
+}	
+
+function Contact(b1, b2, p1, n1, p2)
+{
+	this.b1 = b1;
+	this.b2 = b2;
+	this.p1 = p1;
+	this.n1 = n1;
+	this.p2 = p2;
+}	
+
+var Contacts = []
+var Links = [];
+var States = [];
+var intergrationStep = 1./(24*5);
+
+//drawing helpers
+function drawSphere(context, p, radius, color)
+{
+	context.beginPath();
+	context.fillStyle=color;
+	context.arc(p.x,p.y,radius,0,Math.PI*2,true);
+	context.closePath();
+	context.fill();
+}
+
+function drawCross(context, p, radius, color)
+{
+    drawLine( addV(p, new Vector(-1/5,0)), addV(p, new Vector(1/5,0)));
+    drawLine( addV(p, new Vector(0,-1/5)), addV(p, new Vector(0,1/5)));
+}
+
+function drawPoly(context, state, color)
+{
+    for(var i=0;i<state.b.length-1;i++)
+    {
+        var p1 = state.rb[i];
+        var p2 = state.rb[i+1];
+        drawLine(p1,p2);
+    }
+
+    var p1 = TransFV(state.p, state.b[state.b.length-1]);
+    var p2 = TransFV(state.p, state.b[0]);
+    drawLine(p1,p2);
+}
+
+function drawLine( p1,p2, col)
+{
+    context.beginPath();
+	context.strokeStyle=(col==null)?"#000000":col;
+    x = p1.x*30;
+    y = p1.y*30;
+    context.moveTo(x,y);
+    x = p2.x*30;
+    y = p2.y*30;
+    context.lineTo(x,y);       
+    context.stroke();
+}
+
+function drawNormal( p1,p2, col, r)
+{
+	n = subV(p2,p1);
+	l = lengthV(n);
+	n = mulV(n,1/l)
+	
+	if (r!=undefined)
+	{		
+		l=r
+		p2 = addV(p1,mulV(n, r))
+	}		
+
+	drawLine( p1,p2, col);
+	
+	nn = mulV(n,l*.8);
+	nf = mulV(n,l*.08);
+	
+	drawLine( addV(p1, addV(nn, orto(nf))) ,p2, col)
+	drawLine( addV(p1, addV(nn, mulV(orto(nf),-1))) ,p2, col)
+}
+
+//
+//multiply 2 matrices made out of vectors
+//
+function MulMatFF(m1, m2)
+{
+    var O = [];
+        
+    for(var j=0;j<m1.length;j++)
+    {
+        O[j]=[];
+        for(var i=0;i<m2[0].length;i++)        
+        {
+            var tmp=0;
+            for(var k=0;k<m1[i].length;k++)
+            {
+                tmp += dotF(m1[j][k], m2[k][i]);
+                
+                //tmp += dotV(m1[j][k], m2[k][i]);
+                //tmp += (m1[j][k] * m2[k][i]);
+            }
+            O[j][i] = tmp;
+        }
+    }
+    return O;  
+}
+
+//
+//multiply 2 matrices made out of vectors
+//
+function MulMatSF(s, f)
+{
+    var O = [];        
+    for(var j=0;j<f.length;j++)
+    {
+        O[j]=[];
+        for(var i=0;i<f[0].length;i++)        
+        {
+            O[j][i] = new FrameV( mulV(f[j][i], s[j].M), f[j][i].r*s[j].I);
+        }
+    }
+    return O;
+}
+
+
+//
+// multiply 2 matrices made out of scalars
+//
+function MulMatKK(m1, m2)
+{
+    var O = [];        
+    for(var j=0;j<m1.length;j++)
+    {
+        O[j]=[];
+        for(var i=0;i<m2[0].length;i++)        
+        {
+            var tmp=0;
+            for(var k=0;k<m1[i].length;k++)
+            {
+                tmp += (m1[j][k] * m2[k][i]);
+            }
+            O[j][i] = tmp;
+        }
+    }
+    return O;  
+}
+
+
+//
+// multiply 2 matrices, one made out of vectors and the other made out of scalars
+//
+function MulMatFK(m1, m2)
+{
+    var O = [];        
+    for(var j=0;j<m1.length;j++)
+    {
+        O[j]=[];
+        for(var i=0;i<m2[0].length;i++)        
+        {
+            var tmp= new Frame(0,0,0);
+            for(var k=0;k<m1[i].length;k++)
+            {
+                tmp = addF(mulF(m1[j][k], m2[k][i]), tmp);
+                //tmp = addV(mulV(m1[j][k], m2[k][i]), tmp);
+            }
+            O[j][i] = tmp;
+        }
+    }
+    return O;  
+}
+
+//
+// addV 2 matrices made out of scalars
+//
+function addVMatKK(m1, m2)
+{
+    var O = [];        
+    for(var j=0;j<m1.length;j++)
+    {
+        O[j]=[];
+        for(var i=0;i<m1[0].length;i++)        
+        {
+            O[j][i] = m1[j][i] + m2[j][i];
+        }
+    }
+    return O;
+}
+
+//
+// Transpose matrix
+//
+function TransposeMat(m)
+{
+    var O = [];
+        
+    for(var j=0;j<m[0].length;j++)
+    {
+        O[j]=[];
+        for(var i=0;i<m.length;i++)        
+        {
+            O[j][i] = m[i][j];
+        }
+    }
+    return O;
+}
+
+//
+// Get Jtranspose * lambda
+//
+function GetMinvJtlambda(J, Minv, velT, bias)
+{   
+    var JvelT = MulMatFF(J, velT); 
+
+    if (bias!=undefined)
+    {
+        JvelT = addVMatKK(JvelT, bias);
+    }
+
+    var Jt = TransposeMat(J);
+    
+    var MinvJt =  MulMatSF(Minv, Jt);
+  
+    var JJt = MulMatFF(J, MinvJt ); 
+
+    var invJJt = invertMat( JJt );
+   
+    var lambda = MulMatKK( invJJt, JvelT);
+    
+    var Jtlambda = MulMatFK( Jt, lambda);
+
+    var MinvJtlambda = MulMatSF(Minv, Jtlambda);
+       
+    return MinvJtlambda;
+}
+
+//
+//  Distance constraint, note how the jacobian is a small matrix
+//  Inputs:
+//      bodyA, bodyB: particle  index
+//
+function DistanceConstraint(link)
+{
+	bodyA = link.b1;
+	bodyB = link.b2;
+	
+	var Pa = getPosS( bodyA, link.p1);
+	var Pb = getPosS( bodyB, link.p2);
+
+    var PaPb = subV(Pb, Pa);
+    var PbPa = subV(Pa, Pb);
+
+    // compute bias---------------
+    var betaoverh = .5/intergrationStep;
+    var C = dotV(PaPb, PaPb);
+    
+    // if the constraint is zero (is met) then bail out, the jacobian is zero and 
+    // obviously it wont have an inverse
+    if (C<= 1e-15)
+        return;
+    
+    var bias = [[betaoverh * C]];
+
+    // compute jacobian---------
+    var J = []
+    
+    var Ca = getPosF(bodyA.p);
+    var Cb = getPosF(bodyB.p);
+    
+    var CaPa = subV(Pa, Ca);
+    var CbPb = subV(Pb, Cb);
+       
+    var Wa   = -crossVV(CaPa, PaPb);
+    var Wb   =  crossVV(CbPb, PaPb);
+       
+    J[0] = [ new FrameV(mulV(mulV(PaPb,-1),2), 2*Wa), new FrameV(mulV(PaPb,2), 2*Wb) ];
+  
+    // compute vels--------------
+    var vel = [[ bodyA.v, bodyB.v ]];
+    var velT = TransposeMat(vel);
+
+    //just the diagonal matrix -----
+    var Minv = [ bodyA, bodyB ];
+
+    // solver-----------------------
+    var MinvJtlambda = GetMinvJtlambda(J, Minv, velT, bias)    
+       
+    // update speeds-----------------
+    bodyA.v = subF(bodyA.v, MinvJtlambda[0][0]);
+    bodyB.v = subF(bodyB.v, MinvJtlambda[1][0]);   
+}
+
+//
+// Inequality constraints
+//
+function InequalityConstraints(pair)
+{
+	bodyA = pair.b1;
+	bodyB = pair.b2;
+
+	pair.n1 = mulV(pair.n1, 1/lengthV(pair.n1));
+
+    // compute bias---------------
+    var betaoverh = (.5/intergrationStep);
+    var C = dotV(subV(pair.p1, pair.p2), pair.n1 );
+    var Cdot = dotV( subV(getVelS(bodyA, pair.p1), getVelS(bodyB, pair.p2)), pair.n1);
+    var bias = [[betaoverh * C + Cdot*.5]];
+
+	// compute jacobian---------
+	var J = []
+    
+    var CaPa = subV(pair.p1, pair.b1.p);
+    var CbPb = subV(pair.p2, pair.b2.p);
+
+	J[0] = [ new FrameV(new Vector(  pair.n1.x,  pair.n1.y),   crossVV(CaPa, pair.n1)), 
+	         new FrameV(new Vector( -pair.n1.x, -pair.n1.y),  -crossVV(CbPb, pair.n1))];
+
+    // compute vels--------------
+    var vel = [[ bodyA.v, bodyB.v ]];
+    var velT = TransposeMat(vel);
+
+    //just the diagonal matrix -----
+    var Minv = [ bodyA, bodyB ];
+	
+    // solver-----------------------
+    var MinvJtlambda = GetMinvJtlambda(J, Minv, velT, bias)    
+       
+    // update speeds-----------------
+    bodyA.v = subF(bodyA.v, MinvJtlambda[0][0]);
+    bodyB.v = subF(bodyB.v, MinvJtlambda[1][0]);   
+}
+
+//
+// Integrate step
+//
+function integrate(t)
+{
+    for(var i=0;i<States.length;i++)
+    {
+        States[i].p = addF(States[i].p , mulF(States[i].v, t));       
+        //States.v[i] = mulV(States.v[i], .98);        
+		
+	    for(var j=0;j<States[i].b.length;j++)
+		{
+			States[i].rb[j] = TransFV(States[i].p, States[i].b[j]);
+		}		
+    }
+}
+
+function DistancePointLine(p, p1, p2)
+{
+	dir = SubV(p2,p1);
+	l = lengthV(dir)
+	dirn = mulV(dir, l);
+	
+	p1p = SubV(p1,p);
+	
+	proj = dotV(dirn, p1p)
+	
+	if (proj>l)
+	{
+		return p2;
+	}
+	else if (proj<0)
+	{
+		return p1;
+	}
+	else
+	{
+		return mulVK(dirn, proj) 
+	}	
+}
+
+var closest;
+
+function SimulationLoop()
+{             
+	Contacts = []
+
+	// Compute collisions
+	for(var j=0;j<States.length;j++)
+	{
+		for(var i=0;i<States.length;i++)
+		{
+			if (i==j)
+				continue
+			ComputeContacts(States[i],States[j])
+		}
+	}
+
+    // apply forces (gravity)	
+    for(var i=0;i<States.length;i++)
+        States[i].v.y += (9.8* intergrationStep) * States[i].M;
+
+
+    // apply constraints
+    var iterations = 4;
+    for(var iter=0;iter<iterations;iter++)
+    {    
+        for(var i=0;i<Links.length;i++)
+        {
+            DistanceConstraint(Links[i])
+        }
+		
+        for(var i=0;i<Contacts.length;i++)
+        {
+            InequalityConstraints(Contacts[i])
+        }
+		
+    }
+
+    // compute tentative velocities
+    integrate(intergrationStep);  
+
+	
+    // render objects and collisions
+    {
+        context= myCanvas.getContext('2d');
+        context.clearRect(0,0,600,600);
+
+        for(var i=0;i<States.length;i++)
+        {
+            drawPoly(context, States[i], "#000000");
+			
+			drawCross(context, States[i].p, .1, "#000080")
+        }					
+				
+		for(var i=0;i<Contacts.length;i++)
+		{
+			drawNormal( Contacts[i].b1.p, Contacts[i].p1, "#00ff00");
+//			drawNormal( Contacts[i].b2.p, Contacts[i].p2, "#0000ff");
+		
+			//drawLine( Contacts[i].p1, addV(Contacts[i].p1, Contacts[i].n1), "#ff0000");
+			drawNormal( Contacts[i].p1, Contacts[i].p2, "#ff0000",2);
+		}	
+    }
+	
+}
+
+function init()
+{
+    // create top hook
+    var cubeVerts = [ new Vector(-1,-1), new Vector(1,-1), new Vector(1,1), new Vector(0, 1), new Vector(-1,1) ];
+    var p = new Frame(10,0, 0*pi/180);
+    var v = new Frame(0,0, 0);
+    States.push( new State(p, v, cubeVerts, 0, 0) );
+
+    // create chain
+    var linkVerts = [ new Vector(0, -0.5), new Vector(-0.1, -0.3), new Vector(-0.1, 0.3), new Vector(0, 0.5), new Vector(0.1, 0.3), new Vector(0.1, -0.3)];    
+    for(var i=0;i<12;i++)
+    {
+        var l = Math.sqrt(.5)
+        var p = new Frame(10+i*l + l*.5,1+i*l + l*.5, -45*pi/180);
+        var v = new Frame(0,0, 0);
+        States.push( new State(p, v, linkVerts, 1, 1) );
+		
+		b1 = States[i];
+		b2 = States[i+1]		
+		Links.push( new Link(b1, b1.b[3], b2, b2.b[0]));	
+    }
+
+	//create random geometry
+	var boxVerts1 = [ new Vector(-6, -1), new Vector(6, -1), new Vector(6, 1), new Vector(-6, 1)];
+	var p = new Frame(10,15, 0*pi/180);
+	var v = new Frame(0,0, 0);
+	States.push( new State(p, v, boxVerts1, 0, 0) );
+
+	for(var j=0;j<2;j++)
+	{
+		var boxVerts2 = [ new Vector(-1, -1), new Vector(1, -1), new Vector(1, 1), new Vector(-1, 1)];
+		var p = new Frame(10,9-2.1*j, 0*pi/180);
+		var v = new Frame(0,0, 0);
+		States.push( new State(p, v, boxVerts2, 1, 1) );
+	}  
+	
+	integrate(0);  
+  
+    setInterval(SimulationLoop,10); 
+}
+
+function SegmentIntersection( a, b, c, d)
+{
+	var ab = subV(b,a);	var cd = subV(d,c);
+	var ca = subV(a,c);	var db = subV(b,d);
+	
+	var s = crossVV(ca, ab) / crossVV(cd, ab);
+	if (s>=0 && s<=1)
+	{
+		var t = -crossVV(ca, cd) / crossVV(ab, cd);
+		if (t>=0 && t<=1)
+			return true;
+	}
+	
+	return false;	
+}
+
+
+
+function PointInPoly(point, lines)
+{
+	var outer = null;
+	var dist = 10000000;
+	
+	for (var i = 0; i < lines.length; i++) 
+	{
+		var p1 = lines[i]
+		var p2 = lines[i+1==lines.length?0:i+1];
+
+		var dir = subV(p2,p1);
+		var l = lengthV(dir)
+		var dirn = mulV(dir, 1/l);
+
+		var n = orto(dirn);
+			
+		var p1p = subV(point, p1);
+
+		var projP = dotV(p1p, n);
+
+		if (projP<0)
+			return false;	
+	}
+
+	return true;
+}
+
+function ProjectToLine(p, a,b)
+{
+	ab = subV(b, a);
+	var abn = mulV(ab,1/lengthV(ab));
+	ap = subV(p, a);
+	pr = dotV(abn, ap) 
+	pt = addV( a, mulV(abn,pr))
+	return pt;
+}
+
+function ComputeContacts(s1,s2)
+{
+	var cm = null;
+	for (var i = 0; i < s1.rb.length; i++) 
+	{
+		if (PointInPoly(s1.rb[i], s2.rb))
+		{			
+			for (var j = 0; j < s2.rb.length; j++) 
+			{
+				var jj = (j+1 == s2.rb.length)? 0:j+1
+				if (cm==null)
+					cm = CenterMass(s1.rb);
+				
+				
+				if (SegmentIntersection(cm, s1.rb[i], s2.rb[j], s2.rb[jj]))
+				{									
+					var pt = ProjectToLine(s1.rb[i], s2.rb[j], s2.rb[jj]);
+				
+					Contacts.push(new Contact(s1,s2, s1.rb[i], orto(subV(s2.rb[j], s2.rb[jj])), pt));
+				}
+			}			
+		}		
+	}
+}
+
+
+function showCoords(event, obj) {
+    var x = (event.clientX - obj.offsetLeft) / 30;
+    var y = (event.clientY - obj.offsetTop) / 30;
+		
+	var boxVerts = [ new Vector(-1, -1), new Vector(3, -1), new Vector(1, 1), new Vector(0, 1), new Vector(-1, 1)];
+	closest = PointInPoly(new Vector(x-10,y-10), boxVerts);
+	
+    var coor = closest + " X coords: " + x + ", Y coords: " + y;
+    document.getElementById("demo").innerHTML = coor;
+}
+
+    
+//
+// Inverts a matrix (taken from http://blog.acipo.com/matrix-inversion-in-javascript/)
+//    
+function invertMat(M){
+    // I use Guassian Elimination to calculate the inverse:
+    // (1) 'augment' the matrix (left) by the identity (on the right)
+    // (2) Turn the matrix on the left into the identity by elemetry row ops
+    // (3) The matrix on the right is the inverse (was the identity matrix)
+    // There are 3 elemtary row ops: (I combine b and c in my code)
+    // (a) Swap 2 rows
+    // (b) Multiply a row by a scalar
+    // (c) addV 2 rows
+    
+    //if the matrix isn't square: exit (error)
+    if(M.length !== M[0].length){return;}
+    
+    //create the identity matrix (I), and a copy (C) of the original
+    var i=0, ii=0, j=0, dim=M.length, e=0, t=0;
+    var I = [], C = [];
+    for(i=0; i<dim; i+=1){
+        // Create the row
+        I[I.length]=[];
+        C[C.length]=[];
+        for(j=0; j<dim; j+=1){
+            
+            //if we're on the diagonal, put a 1 (for identity)
+            if(i==j){ I[i][j] = 1; }
+            else{ I[i][j] = 0; }
+            
+            // Also, make the copy of the original
+            C[i][j] = M[i][j];
+        }
+    }
+    
+    // Perform elementary row operations
+    for(i=0; i<dim; i+=1){
+        // get the element e on the diagonal
+        e = C[i][i];
+        
+        // if we have a 0 on the diagonal (we'll need to swap with a lower row)
+        if(e==0){
+            //look through every row below the i'th row
+            for(ii=i+1; ii<dim; ii+=1){
+                //if the ii'th row has a non-0 in the i'th col
+                if(C[ii][i] != 0){
+                    //it would make the diagonal have a non-0 so swap it
+                    for(j=0; j<dim; j++){
+                        e = C[i][j];       //temp store i'th row
+                        C[i][j] = C[ii][j];//replace i'th row by ii'th
+                        C[ii][j] = e;      //repace ii'th by temp
+                        e = I[i][j];       //temp store i'th row
+                        I[i][j] = I[ii][j];//replace i'th row by ii'th
+                        I[ii][j] = e;      //repace ii'th by temp
+                    }
+                    //don't bother checking other rows since we've swapped
+                    break;
+                }
+            }
+            //get the new diagonal
+            e = C[i][i];
+            //if it's still 0, not invertable (error)
+            if(e==0){return}
+        }
+        
+        // Scale this row down by e (so we have a 1 on the diagonal)
+        for(j=0; j<dim; j++){
+            C[i][j] = C[i][j]/e; //apply to original matrix
+            I[i][j] = I[i][j]/e; //apply to identity
+        }
+        
+        // subVtract this row (scaled appropriately for each row) from ALL of
+        // the other rows so that there will be 0's in this column in the
+        // rows above and below this one
+        for(ii=0; ii<dim; ii++){
+            // Only apply to other rows (we want a 1 on the diagonal)
+            if(ii==i){continue;}
+            
+            // We want to change this element to 0
+            e = C[ii][i];
+            
+            // subVtract (the row above(or below) scaled by e) from (the
+            // current row) but start at the i'th column and assume all the
+            // stuff left of diagonal is 0 (which it should be if we made this
+            // algorithm correctly)
+            for(j=0; j<dim; j++){
+                C[ii][j] -= e*C[i][j]; //apply to original matrix
+                I[ii][j] -= e*I[i][j]; //apply to identity
+            }
+        }
+    }
+    
+    //we've done all operations, C should be the identity
+    //matrix I should be the inverse:
+    return I;
+}    
+</script>
+
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<title>HTML5 Physics simulation</title>
+</script>
+<script>
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+  ga('create', 'UA-3425939-7', 'auto');
+  ga('send', 'pageview');
+</script>
+<style type="text/css">
+<!--
+body { background-color:#ededed; font:norm2al 12px/18px Arial, Helvetica, sans-serif; }
+h1 { display:block; width:600px; margin:20px auto; paddVing-bottom:20px; font:norm2al 24px/30px Georgia, "Times New Roman", Times, serif; color:#333; text-shadow: 1px 2px 3px #ccc; border-bottom:1px solid #cbcbcb; }
+#container { width:600px; margin:0 auto; }
+#myCanvas { background:#fff; border:1px solid #cbcbcb; }
+#nav { display:block; width:100%; text-align:center; }
+#nav li { display:block; font-weight:bold; line-height:21px; text-shadow:1px 1px 1px #fff; width:100px; height:21px; paddVing:5px; margin:0 10px; background:#e0e0e0; border:1px solid #ccc; -moz-border-radius:4px;-webkit-border-radius:4px; border-radius:4px; float:left; }
+#nav li a { color:#000; display:block; text-decoration:none; width:100%; height:100%; }
+-->
+</style>
+</head>
+<body onload="init()">
+<h1>Rigid body simulator with equality and inequality constraints</h1>
+<div id="container">
+	
+<canvas id="myCanvas" width="600" height="600" onmousemove="showCoords(event, this)"></canvas>
+
+<p id="demo"></p>
+
+<h2>Intro</h2>
+
+This is a quick exercise to learn how constraints work in a physics simulator. This sample is using equality and inequality constraints for the joints</br>
+</br>
+
+This physics simulator is heavily based on Erin Catto's GDC2009 talk.</br>
+</br>
+</br>
+<h2>Contact/Questions:</h2>
+ &lt;my_github_account_username&gt;@gmail.com.
+</br>
+</br>
+</div>
+</body>
+</html>

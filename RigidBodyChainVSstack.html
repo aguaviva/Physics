@@ -54,38 +54,39 @@ var CoefficientOfRestitution = .5;
 var showNormals = null;
 
 var mousePosition = new Vector(0,0);
-
+var context;
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
 //                                               Drawing helpers
 //
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-function moveTo(cntx, p) { cntx.moveTo(p.x*30,p.y*30); }
-function lineTo(cntx, p) { cntx.lineTo(p.x*30,p.y*30); }
+function moveTo(p) { context.moveTo(p.x*30,p.y*30); }
+function lineTo(p) { context.lineTo(p.x*30,p.y*30); }
 
-function drawLine( p1,p2, col)
+function drawLine( p1,p2, color)
 {
     context.beginPath();
-	context.strokeStyle=(col==null)?"#000000":col;
+	context.strokeStyle=(color==null)?"#000000":color;
 	moveTo(p1)
 	lineTo(p2)
     context.stroke();
 }
 
-function drawCross(context, p, radius, color)
+function drawCross(p, radius, color)
 {
     drawLine( addV(p, new Vector(-1/5,0)), addV(p, new Vector(1/5,0)));
     drawLine( addV(p, new Vector(0,-1/5)), addV(p, new Vector(0,1/5)));
 }
 
-function drawPoly(context, state, color)
+function drawPoly(state, color)
 {
     context.beginPath();
-	context.strokeStyle=(col==null)?"#000000":col;
+	context.strokeStyle=(color==null)?"#000000":color;
 	moveTo(state.rb[0])
     for(var i=1;i<state.b.length;i++)
 		lineTo(state.rb[i])
+	context.closePath();
     context.stroke();
 }
 
@@ -532,13 +533,13 @@ function ComputeContacts(s1,s2)
 		{			
 			for (var j = 0; j < s2.rb.length; j++) 
 			{
-				var jj = (j+1 == s2.rb.length)? 0:j+1
+				var jj = j+1; if (jj >= s2.rb.length) jj = 0;
 					
 				if (SegmentIntersection(s1.p, s1.rb[i], s2.rb[j], s2.rb[jj]))
 				{									
 					var pt = ProjectPointToLine(s1.rb[i], s2.rb[j], s2.rb[jj]);
-					var penetration = ortoV(subV(s2.rb[j], s2.rb[jj]));
-					Contacts.push(new Contact(s1,s2, s1.rb[i], penetration, pt));
+					var normal = ortoV(subV(s2.rb[j], s2.rb[jj]));
+					Contacts.push(new Contact(s1,s2, s1.rb[i], normal, pt));
 				}
 			}			
 		}		
@@ -559,7 +560,6 @@ function integrate()
     for(var i=0;i<States.length;i++)
     {
         States[i].p = addF(States[i].p , mulF(States[i].v, intergrationStep));       
-        //States[i].v = mulV(States[i].v, 0.98);        
 		
 	    for(var j=0;j<States[i].b.length;j++)
 		{
@@ -584,12 +584,8 @@ function SimulationLoop()
 	for(var j=0;j<States.length;j++)
 	{
 		for(var i=0;i<j;i++)
-		{
-			//  don't check collisions agains oneself
-			if (i==j)
-				continue
-				
-			//  if both objects are static dont check collisions
+		{			
+			//  if both objects are static don't check collisions
 			if (States[i].M==0 && States[j].M==0)
 				continue
 			ComputeContacts(States[i],States[j])
@@ -625,14 +621,12 @@ function SimulationLoop()
     // render objects and collisions
 	//
     {
-        context= myCanvas.getContext('2d');
         context.clearRect(0,0,600,600);
 
         for(var i=0;i<States.length;i++)
         {
-            drawPoly(context, States[i], "#000000");
-			
-			drawCross(context, States[i].p, .1, "#000080")
+            drawPoly(States[i], "#000000");			
+			drawCross(States[i].p, .1, "#000080")
         }					
 
 		if (showNormals)
@@ -654,18 +648,26 @@ function SimulationLoop()
 
 function init()
 {
+    context = myCanvas.getContext('2d');
+
 	States = []
 	Links = []
 
+	//
+	// Create scene
+	//
+
     // create top hook
+	//
     var cubeVerts = [ new Vector(-1,-1), new Vector(1,-1), new Vector(1,1), new Vector(0, 1), new Vector(-1,1) ];
     var p = new Frame(10,0, 0);
     var v = new Frame(0,0, 0);
     States.push( new State(p, v, cubeVerts, 0, 0) );
 
     // create chain
+	//
     var linkVerts = [ new Vector(0, -0.5), new Vector(-0.1, -0.3), new Vector(-0.1, 0.3), new Vector(0, 0.5), new Vector(0.1, 0.3), new Vector(0.1, -0.3)];    
-    for(var i=0;i<15;i++)
+    for(var i=0;i<14;i++)
     {
         var l = Math.sqrt(.5)
         var p = new Frame(10+i*l + l*.5,1+i*l + l*.5, DegToRad(-45));
@@ -677,43 +679,43 @@ function init()
 		Links.push( new Link(b1, b1.b[3], b2, b2.b[0]));	
     }
 
+	// ground
+	//
 	var boxVerts1 = [ new Vector(-9, -1), new Vector(9, -1), new Vector(9, 1), new Vector(-9, 1)];
 	var p = new Frame(9,19, DegToRad(0));
 	var v = new Frame(0,0, 0);
 	States.push( new State(p, v, boxVerts1, 0, 0) );
 
+	// left wall
+	//
 	var boxVerts1 = [ new Vector(-6, -1), new Vector(6, -1), new Vector(6, 1), new Vector(-6, 1)];
 	var p = new Frame(0,12, DegToRad(90));
 	var v = new Frame(0,0, 0);
 	States.push( new State(p, v, boxVerts1, 0, 0) );
-
 	
+	// create stack
+	//
 	var r = 1;
-	for(var i=0;i<1;i++)
+	for(var j=0;j<6;j++)
 	{
-		for(var j=0;j<6;j++)
-		{
-			var boxVerts2 = [ new Vector(-r, -r), new Vector(r, -r), new Vector(r, r), new Vector(-r, r)];
-			var p = new Frame(6 + i*3,17-2.01*r*j, DegToRad(0*j*10));
-			var v = new Frame(0,0, 0);
-			States.push( new State(p, v, boxVerts2, 1, 1) );
-		}  
-	}	
-	    
+		var boxVerts2 = [ new Vector(-r, -r), new Vector(r, -r), new Vector(r, r), new Vector(-r, r)];
+		var p = new Frame(6 ,17-2.8*r*j, DegToRad(0*j*10));
+		var v = new Frame(0,0, 0);
+		States.push( new State(p, v, boxVerts2, 1, 1) );
+	}  	    
 }
 
-function showCoords(event, obj) {
+function showCoords(event, obj) 
+{
     var x = (event.clientX - obj.offsetLeft) / 30;
-    var y = (event.clientY - obj.offsetTop) / 30;
+    var y = (event.clientY - obj.offsetTop ) / 30;
 		
 	mousePosition.x = x;
 	mousePosition.y = y;
 	
     var coor = " X coords: " + x + ", Y coords: " + y;
     document.getElementById("demo").innerHTML = coor;
-}
-
-    
+}   
 </script>
 
 <!DOCTYPE html>
@@ -742,7 +744,7 @@ h1 { display:block; width:600px; margin:20px auto; paddVing-bottom:20px; font:no
 </style>
 </head>
 <body onload="init();setInterval(SimulationLoop,5); ">
-<h1>Rigid body simulator with equality and inequality constraints</h1>
+<h1>Rigid body simulator featuring equality and inequality constraints</h3>
 <div id="container">
 	
 <canvas id="myCanvas" width="600" height="600" onmousemove="showCoords(event, this)"></canvas>
@@ -753,7 +755,7 @@ h1 { display:block; width:600px; margin:20px auto; paddVing-bottom:20px; font:no
 
 <h2>Intro</h2>
 
-This is a quick exercise to learn how constraints work in a physics simulator. This sample is using equality and inequality constraints for the joints</br>
+This is a quick exercise to learn how constraints work in a physics simulator.</br>
 </br>
 
 This physics simulator is heavily based on Erin Catto's GDC2009 talk.</br>

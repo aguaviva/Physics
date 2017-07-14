@@ -1,46 +1,33 @@
 <script type="text/javascript">
-var pi = 3.14159265359;
 
-var console = []
+var PI = 3.14159265359;
+function DegToRad(a) {return a*PI/180.0 }
 
 //Vector class + math
-function Vector(x,y) { this.x = x; this.y = y; }
-function addV(a,b) { return new Vector(a.x+b.x, a.y+b.y); }
-function subV(a,b) { return new Vector(a.x-b.x, a.y-b.y); }
-function mulV(a,k) { return new Vector(a.x*k, a.y *k); }
-function dotV(a,b) { return a.x*b.x+a.y*b.y; }
+function Vector(x,y)  { this.x = x; this.y = y; }
+function addV(a,b)    { return new Vector(a.x+b.x, a.y+b.y); }
+function subV(a,b)    { return new Vector(a.x-b.x, a.y-b.y); }
+function mulV(a,k)    { return new Vector(a.x*k, a.y *k); }
+function dotV(a,b)    { return a.x*b.x+a.y*b.y; }
+function RotV(a, v)   { return new Vector(Math.cos(a)*v.x - Math.sin(a)*v.y,  Math.sin(a)*v.x + Math.cos(a)*v.y); }
+function ortoV(a)     { return new Vector( -a.y, a.x); }
 function crossKV(k,v) { return new Vector(-v.y*k, v.x *k); }
 function crossVV(a,b) { return a.x*b.y-a.y*b.x; }
-function norm2V(a) { return dotV(a,a); }
-function lengthV(a) { return Math.sqrt(norm2V(a,a)); }
-function norm(a) { return mulV(a, 1.0/lengthV(a)); }
-function orto(a) { return new Vector( -a.y, a.x); }
-function RotV(a, v) { return new Vector(Math.cos(a)*v.x - Math.sin(a)*v.y, Math.sin(a)*v.x+Math.cos(a)*v.y); }
-function InvRotV(a, v) { return new Vector(Math.cos(a)*v.x + Math.sin(a)*v.y, -Math.sin(a)*v.x+Math.cos(a)*v.y); }
+function lengthV(a)   { return Math.sqrt(dotV(a,a)); }
 
 // Frame of reference
 function Frame(x, y, r) { this.x = x; this.y = y; this.r = r; }
-function FrameV(v, r) { this.x = v.x; this.y = v.y; this.r = r; }
-function addF(a,b) { return new Frame(a.x+b.x, a.y+b.y, a.r+b.r); }
-function subF(a,b) { return new Frame(a.x-b.x, a.y-b.y, a.r-b.r); }
-function mulF(a,k) { return new Frame(a.x*k, a.y*k, a.r*k); }
-function dotF(a,b) { return a.x*b.x+a.y*b.y+a.r*b.r; }
-function TransFV(f,p) { return addV(new Vector(f.x, f.y), RotV(f.r, p) ); }
-function InvTransFV(f,p) { return addV(InvRotV(f.r, p), new Vector(f.x, f.y) ); }
-function getPosF(f) { return new Vector(f.x, f.y); }
-
-function CenterMass(lines)
-{
-	var o = new Vector(0,0);
-	for (var i = 0; i < lines.length; i++) 
-		o = addV(o,lines[i])
-	return mulV(o, 1.0/lines.length);
-}
+function FrameV(v, r)   { this.x = v.x; this.y = v.y; this.r = r; }
+function addF(a,b)      { return new Frame(a.x+b.x, a.y+b.y, a.r+b.r); }
+function subF(a,b)      { return new Frame(a.x-b.x, a.y-b.y, a.r-b.r); }
+function mulF(a,k)      { return new Frame(a.x*k, a.y*k, a.r*k); }
+function dotF(a,b)      { return a.x*b.x+a.y*b.y+a.r*b.r; }
+function TransFV(f,p)   { return addV(f, RotV(f.r, p) ); }
 
 // velocities, positions and radius
-function State(p, v, b, M, I) { this.p = p; this.v = v; this.b = b; this.rb = []; this.M=M; this.I = I;  }
-function getVelS(f, p) { return addV( f.v, crossKV( f.v.r, subV(p,f.p) ) ); }
-function getPosS(f, p) { return TransFV( f.p, p ); }
+function State(pos, vel, body, invMass, invI) { this.p = pos; this.v = vel; this.b = body; this.rb = []; this.M=invMass; this.I = invI;  }
+function getVelS(f, p)        { return addV( f.v, crossKV( f.v.r, subV(p,f.p) ) ); }
+function getPosS(f, p)        { return TransFV( f.p, p ); }
 
 function Link(b1, p1, b2, p2)
 {
@@ -59,14 +46,12 @@ function Contact(b1, b2, p1, n1, p2)
 	this.p2 = p2;
 }	
 
-
-var showNormals = null;
-
 var Contacts = []
 var Links = [];
 var States = [];
 var intergrationStep = 1./(24*5);
 var CoefficientOfRestitution = .5;
+var showNormals = null;
 
 var mousePosition = new Vector(0,0);
 
@@ -76,15 +61,16 @@ var mousePosition = new Vector(0,0);
 //
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+function moveTo(cntx, p) { cntx.moveTo(p.x*30,p.y*30); }
+function lineTo(cntx, p) { cntx.lineTo(p.x*30,p.y*30); }
 
-//drawing helpers
-function drawSphere(context, p, radius, color)
+function drawLine( p1,p2, col)
 {
-	context.beginPath();
-	context.fillStyle=color;
-	context.arc(p.x,p.y,radius,0,Math.PI*2,true);
-	context.closePath();
-	context.fill();
+    context.beginPath();
+	context.strokeStyle=(col==null)?"#000000":col;
+	moveTo(p1)
+	lineTo(p2)
+    context.stroke();
 }
 
 function drawCross(context, p, radius, color)
@@ -95,28 +81,11 @@ function drawCross(context, p, radius, color)
 
 function drawPoly(context, state, color)
 {
-    for(var i=0;i<state.b.length-1;i++)
-    {
-        var p1 = state.rb[i];
-        var p2 = state.rb[i+1];
-        drawLine(p1,p2);
-    }
-
-    var p1 = TransFV(state.p, state.b[state.b.length-1]);
-    var p2 = TransFV(state.p, state.b[0]);
-    drawLine(p1,p2);
-}
-
-function drawLine( p1,p2, col)
-{
     context.beginPath();
 	context.strokeStyle=(col==null)?"#000000":col;
-    x = p1.x*30;
-    y = p1.y*30;
-    context.moveTo(x,y);
-    x = p2.x*30;
-    y = p2.y*30;
-    context.lineTo(x,y);       
+	moveTo(state.rb[0])
+    for(var i=1;i<state.b.length;i++)
+		lineTo(state.rb[i])
     context.stroke();
 }
 
@@ -137,8 +106,8 @@ function drawNormal( p1,p2, col, r)
 	nn = mulV(n,l*.8);
 	nf = mulV(n,l*.08);
 	
-	drawLine( addV(p1, addV(nn, orto(nf))) ,p2, col)
-	drawLine( addV(p1, addV(nn, mulV(orto(nf),-1))) ,p2, col)
+	drawLine( addV(p1, addV(nn, ortoV(nf))) ,p2, col)
+	drawLine( addV(p1, addV(nn, mulV(ortoV(nf),-1))) ,p2, col)
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -220,11 +189,10 @@ function MulMatFK(m1, m2)
         O[j]=[];
         for(var i=0;i<m2[0].length;i++)        
         {
-            var tmp= new Frame(0,0,0);
+            var tmp = new Frame(0,0,0);
             for(var k=0;k<m1[i].length;k++)
             {
                 tmp = addF(mulF(m1[j][k], m2[k][i]), tmp);
-                //tmp = addV(mulV(m1[j][k], m2[k][i]), tmp);
             }
             O[j][i] = tmp;
         }
@@ -254,8 +222,7 @@ function addVMatKK(m1, m2)
 //
 function TransposeMat(m)
 {
-    var O = [];
-        
+    var O = [];        
     for(var j=0;j<m[0].length;j++)
     {
         O[j]=[];
@@ -399,17 +366,12 @@ function GetMinvJtlambda(J, Minv, velT, bias)
 }
 
 //
-//  Distance constraint, note how the jacobian is a small matrix
-//  Inputs:
-//      bodyA, bodyB: particle  index
+// Compute velocity corrections to satisfy a distance constraint
 //
 function DistanceConstraint(link)
 {
-	bodyA = link.b1;
-	bodyB = link.b2;
-	
-	var Pa = getPosS( bodyA, link.p1);
-	var Pb = getPosS( bodyB, link.p2);
+	var Pa = getPosS( link.b1, link.p1);
+	var Pb = getPosS( link.b2, link.p2);
 
     var PaPb = subV(Pb, Pa);
     var PbPa = subV(Pa, Pb);
@@ -428,8 +390,8 @@ function DistanceConstraint(link)
     // compute jacobian---------
     var J = []
     
-    var Ca = getPosF(bodyA.p);
-    var Cb = getPosF(bodyB.p);
+    var Ca = link.b1.p;
+    var Cb = link.b2.p;
     
     var CaPa = subV(Pa, Ca);
     var CbPb = subV(Pb, Cb);
@@ -440,34 +402,31 @@ function DistanceConstraint(link)
     J[0] = [ new FrameV(mulV(mulV(PaPb,-1),2), 2*Wa), new FrameV(mulV(PaPb,2), 2*Wb) ];
   
     // compute vels--------------
-    var vel = [[ bodyA.v, bodyB.v ]];
+    var vel = [[ link.b1.v, link.b2.v ]];
     var velT = TransposeMat(vel);
 
     //just the diagonal matrix -----
-    var Minv = [ bodyA, bodyB ];
+    var Minv = [ link.b1, link.b2 ];
 
     // solver-----------------------
     var MinvJtlambda = GetMinvJtlambda(J, Minv, velT, bias)    
        
     // update speeds-----------------
-    bodyA.v = subF(bodyA.v, MinvJtlambda[0][0]);
-    bodyB.v = subF(bodyB.v, MinvJtlambda[1][0]);   
+    link.b1.v = subF(link.b1.v, MinvJtlambda[0][0]);
+    link.b2.v = subF(link.b2.v, MinvJtlambda[1][0]);   
 }
 
 //
-// Inequality constraints
+// Compute velocity corrections to satisfy a contact constraint
 //
 function InequalityConstraints(pair)
 {
-	bodyA = pair.b1;
-	bodyB = pair.b2;
-
 	pair.n1 = mulV(pair.n1, 1/lengthV(pair.n1));
 
     // compute bias---------------
     var betaoverh = (.5/intergrationStep);
     var C = dotV(subV(pair.p1, pair.p2), pair.n1 );
-    var Cdot = dotV( subV(getVelS(bodyA, pair.p1), getVelS(bodyB, pair.p2)), pair.n1);
+    var Cdot = dotV( subV(getVelS(pair.b1, pair.p1), getVelS(pair.b2, pair.p2)), pair.n1);
     var bias = [[betaoverh * C + Cdot*CoefficientOfRestitution]];
 
 	// compute jacobian---------
@@ -476,22 +435,22 @@ function InequalityConstraints(pair)
     var CaPa = subV(pair.p1, pair.b1.p);
     var CbPb = subV(pair.p2, pair.b2.p);
 
-	J[0] = [ new FrameV(new Vector(  pair.n1.x,  pair.n1.y),   crossVV(CaPa, pair.n1)), 
-	         new FrameV(new Vector( -pair.n1.x, -pair.n1.y),  -crossVV(CbPb, pair.n1))];
+	J[0] = [ new Frame( pair.n1.x,  pair.n1.y,   crossVV(CaPa, pair.n1)), 
+	         new Frame(-pair.n1.x, -pair.n1.y,  -crossVV(CbPb, pair.n1))];
 
     // compute vels--------------
-    var vel = [[ bodyA.v, bodyB.v ]];
+    var vel = [[ pair.b1.v, pair.b2.v ]];
     var velT = TransposeMat(vel);
 
     //just the diagonal matrix -----
-    var Minv = [ bodyA, bodyB ];
+    var Minv = [ pair.b1, pair.b2 ];
 	
     // solver-----------------------
     var MinvJtlambda = GetMinvJtlambda(J, Minv, velT, bias)    
        
     // update speeds-----------------
-    bodyA.v = subF(bodyA.v, MinvJtlambda[0][0]);
-    bodyB.v = subF(bodyB.v, MinvJtlambda[1][0]);   
+    pair.b1.v = subF(pair.b1.v, MinvJtlambda[0][0]);
+    pair.b2.v = subF(pair.b2.v, MinvJtlambda[1][0]);   
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -500,6 +459,9 @@ function InequalityConstraints(pair)
 //
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+//
+// Compute intersection between two segments
+//
 function SegmentIntersection( a, b, c, d)
 {
 	var ab = subV(b,a);	var cd = subV(d,c);
@@ -516,6 +478,9 @@ function SegmentIntersection( a, b, c, d)
 	return false;	
 }
 
+//
+// Determine if a point is inside of a convex poligon
+//
 function PointInPoly(point, lines)
 {
 	var outer = null;
@@ -530,7 +495,7 @@ function PointInPoly(point, lines)
 		var l = lengthV(dir)
 		var dirn = mulV(dir, 1/l);
 
-		var n = orto(dirn);
+		var n = ortoV(dirn);
 			
 		var p1p = subV(point, p1);
 
@@ -543,7 +508,10 @@ function PointInPoly(point, lines)
 	return true;
 }
 
-function ProjectToLine(p, a,b)
+//
+// Project a point onto a line
+//
+function ProjectPointToLine(p, a,b)
 {
 	ab = subV(b, a);
 	var abn = mulV(ab,1/lengthV(ab));
@@ -553,9 +521,11 @@ function ProjectToLine(p, a,b)
 	return pt;
 }
 
+//
+// Given two bodies compute collisions and penetrations
+//
 function ComputeContacts(s1,s2)
 {
-	var cm = null;
 	for (var i = 0; i < s1.rb.length; i++) 
 	{
 		if (PointInPoly(s1.rb[i], s2.rb))
@@ -563,14 +533,12 @@ function ComputeContacts(s1,s2)
 			for (var j = 0; j < s2.rb.length; j++) 
 			{
 				var jj = (j+1 == s2.rb.length)? 0:j+1
-				if (cm==null)
-					cm = CenterMass(s1.rb);
-				
-				if (SegmentIntersection(cm, s1.rb[i], s2.rb[j], s2.rb[jj]))
+					
+				if (SegmentIntersection(s1.p, s1.rb[i], s2.rb[j], s2.rb[jj]))
 				{									
-					var pt = ProjectToLine(s1.rb[i], s2.rb[j], s2.rb[jj]);
-				
-					Contacts.push(new Contact(s1,s2, s1.rb[i], orto(subV(s2.rb[j], s2.rb[jj])), pt));
+					var pt = ProjectPointToLine(s1.rb[i], s2.rb[j], s2.rb[jj]);
+					var penetration = ortoV(subV(s2.rb[j], s2.rb[jj]));
+					Contacts.push(new Contact(s1,s2, s1.rb[i], penetration, pt));
 				}
 			}			
 		}		
@@ -653,8 +621,6 @@ function SimulationLoop()
     // compute tentative velocities
 	//
     integrate();  
-
-
 	
     // render objects and collisions
 	//
@@ -693,7 +659,7 @@ function init()
 
     // create top hook
     var cubeVerts = [ new Vector(-1,-1), new Vector(1,-1), new Vector(1,1), new Vector(0, 1), new Vector(-1,1) ];
-    var p = new Frame(10,0, 0*pi/180);
+    var p = new Frame(10,0, 0);
     var v = new Frame(0,0, 0);
     States.push( new State(p, v, cubeVerts, 0, 0) );
 
@@ -702,7 +668,7 @@ function init()
     for(var i=0;i<15;i++)
     {
         var l = Math.sqrt(.5)
-        var p = new Frame(10+i*l + l*.5,1+i*l + l*.5, -45*pi/180);
+        var p = new Frame(10+i*l + l*.5,1+i*l + l*.5, DegToRad(-45));
         var v = new Frame(0,0, 0);
         States.push( new State(p, v, linkVerts, 1, 1) );
 		
@@ -712,12 +678,12 @@ function init()
     }
 
 	var boxVerts1 = [ new Vector(-9, -1), new Vector(9, -1), new Vector(9, 1), new Vector(-9, 1)];
-	var p = new Frame(9,19, 0*pi/180);
+	var p = new Frame(9,19, DegToRad(0));
 	var v = new Frame(0,0, 0);
 	States.push( new State(p, v, boxVerts1, 0, 0) );
 
 	var boxVerts1 = [ new Vector(-6, -1), new Vector(6, -1), new Vector(6, 1), new Vector(-6, 1)];
-	var p = new Frame(0,12, 90*pi/180);
+	var p = new Frame(0,12, DegToRad(90));
 	var v = new Frame(0,0, 0);
 	States.push( new State(p, v, boxVerts1, 0, 0) );
 
@@ -728,7 +694,7 @@ function init()
 		for(var j=0;j<6;j++)
 		{
 			var boxVerts2 = [ new Vector(-r, -r), new Vector(r, -r), new Vector(r, r), new Vector(-r, r)];
-			var p = new Frame(6 + i*3,17-2.01*r*j, 0*j*10*pi/180);
+			var p = new Frame(6 + i*3,17-2.01*r*j, DegToRad(0*j*10));
 			var v = new Frame(0,0, 0);
 			States.push( new State(p, v, boxVerts2, 1, 1) );
 		}  

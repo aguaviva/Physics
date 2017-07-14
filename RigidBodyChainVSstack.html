@@ -59,10 +59,23 @@ function Contact(b1, b2, p1, n1, p2)
 	this.p2 = p2;
 }	
 
+
+var showNormals = null;
+
 var Contacts = []
 var Links = [];
 var States = [];
 var intergrationStep = 1./(24*5);
+var CoefficientOfRestitution = .5;
+
+var mousePosition = new Vector(0,0);
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//
+//                                               Drawing helpers
+//
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 
 //drawing helpers
 function drawSphere(context, p, radius, color)
@@ -128,6 +141,12 @@ function drawNormal( p1,p2, col, r)
 	drawLine( addV(p1, addV(nn, mulV(orto(nf),-1))) ,p2, col)
 }
 
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//
+//                                               Matrix math
+//
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 //
 //multiply 2 matrices made out of vectors
 //
@@ -144,9 +163,6 @@ function MulMatFF(m1, m2)
             for(var k=0;k<m1[i].length;k++)
             {
                 tmp += dotF(m1[j][k], m2[k][i]);
-                
-                //tmp += dotV(m1[j][k], m2[k][i]);
-                //tmp += (m1[j][k] * m2[k][i]);
             }
             O[j][i] = tmp;
         }
@@ -171,7 +187,6 @@ function MulMatSF(s, f)
     return O;
 }
 
-
 //
 // multiply 2 matrices made out of scalars
 //
@@ -193,7 +208,6 @@ function MulMatKK(m1, m2)
     }
     return O;  
 }
-
 
 //
 // multiply 2 matrices, one made out of vectors and the other made out of scalars
@@ -252,6 +266,108 @@ function TransposeMat(m)
     }
     return O;
 }
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//
+//                                               Constraints solver
+//
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//
+// Inverts a matrix (taken from http://blog.acipo.com/matrix-inversion-in-javascript/)
+//    
+function invertMat(M){
+    // I use Guassian Elimination to calculate the inverse:
+    // (1) 'augment' the matrix (left) by the identity (on the right)
+    // (2) Turn the matrix on the left into the identity by elemetry row ops
+    // (3) The matrix on the right is the inverse (was the identity matrix)
+    // There are 3 elemtary row ops: (I combine b and c in my code)
+    // (a) Swap 2 rows
+    // (b) Multiply a row by a scalar
+    // (c) addV 2 rows
+    
+    //if the matrix isn't square: exit (error)
+    if(M.length !== M[0].length){return;}
+    
+    //create the identity matrix (I), and a copy (C) of the original
+    var i=0, ii=0, j=0, dim=M.length, e=0, t=0;
+    var I = [], C = [];
+    for(i=0; i<dim; i+=1){
+        // Create the row
+        I[I.length]=[];
+        C[C.length]=[];
+        for(j=0; j<dim; j+=1){
+            
+            //if we're on the diagonal, put a 1 (for identity)
+            if(i==j){ I[i][j] = 1; }
+            else{ I[i][j] = 0; }
+            
+            // Also, make the copy of the original
+            C[i][j] = M[i][j];
+        }
+    }
+    
+    // Perform elementary row operations
+    for(i=0; i<dim; i+=1){
+        // get the element e on the diagonal
+        e = C[i][i];
+        
+        // if we have a 0 on the diagonal (we'll need to swap with a lower row)
+        if(e==0){
+            //look through every row below the i'th row
+            for(ii=i+1; ii<dim; ii+=1){
+                //if the ii'th row has a non-0 in the i'th col
+                if(C[ii][i] != 0){
+                    //it would make the diagonal have a non-0 so swap it
+                    for(j=0; j<dim; j++){
+                        e = C[i][j];       //temp store i'th row
+                        C[i][j] = C[ii][j];//replace i'th row by ii'th
+                        C[ii][j] = e;      //repace ii'th by temp
+                        e = I[i][j];       //temp store i'th row
+                        I[i][j] = I[ii][j];//replace i'th row by ii'th
+                        I[ii][j] = e;      //repace ii'th by temp
+                    }
+                    //don't bother checking other rows since we've swapped
+                    break;
+                }
+            }
+            //get the new diagonal
+            e = C[i][i];
+            //if it's still 0, not invertable (error)
+            if(e==0){return}
+        }
+        
+        // Scale this row down by e (so we have a 1 on the diagonal)
+        for(j=0; j<dim; j++){
+            C[i][j] = C[i][j]/e; //apply to original matrix
+            I[i][j] = I[i][j]/e; //apply to identity
+        }
+        
+        // subVtract this row (scaled appropriately for each row) from ALL of
+        // the other rows so that there will be 0's in this column in the
+        // rows above and below this one
+        for(ii=0; ii<dim; ii++){
+            // Only apply to other rows (we want a 1 on the diagonal)
+            if(ii==i){continue;}
+            
+            // We want to change this element to 0
+            e = C[ii][i];
+            
+            // subVtract (the row above(or below) scaled by e) from (the
+            // current row) but start at the i'th column and assume all the
+            // stuff left of diagonal is 0 (which it should be if we made this
+            // algorithm correctly)
+            for(j=0; j<dim; j++){
+                C[ii][j] -= e*C[i][j]; //apply to original matrix
+                I[ii][j] -= e*I[i][j]; //apply to identity
+            }
+        }
+    }
+    
+    //we've done all operations, C should be the identity
+    //matrix I should be the inverse:
+    return I;
+}    
 
 //
 // Get Jtranspose * lambda
@@ -352,7 +468,7 @@ function InequalityConstraints(pair)
     var betaoverh = (.5/intergrationStep);
     var C = dotV(subV(pair.p1, pair.p2), pair.n1 );
     var Cdot = dotV( subV(getVelS(bodyA, pair.p1), getVelS(bodyB, pair.p2)), pair.n1);
-    var bias = [[betaoverh * C + Cdot*.5]];
+    var bias = [[betaoverh * C + Cdot*CoefficientOfRestitution]];
 
 	// compute jacobian---------
 	var J = []
@@ -378,153 +494,11 @@ function InequalityConstraints(pair)
     bodyB.v = subF(bodyB.v, MinvJtlambda[1][0]);   
 }
 
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
-// Integrate step
+//                                               Collision detection
 //
-function integrate(t)
-{
-    for(var i=0;i<States.length;i++)
-    {
-        States[i].p = addF(States[i].p , mulF(States[i].v, t));       
-        //States.v[i] = mulV(States.v[i], .98);        
-		
-	    for(var j=0;j<States[i].b.length;j++)
-		{
-			States[i].rb[j] = TransFV(States[i].p, States[i].b[j]);
-		}		
-    }
-}
-
-function DistancePointLine(p, p1, p2)
-{
-	dir = SubV(p2,p1);
-	l = lengthV(dir)
-	dirn = mulV(dir, l);
-	
-	p1p = SubV(p1,p);
-	
-	proj = dotV(dirn, p1p)
-	
-	if (proj>l)
-	{
-		return p2;
-	}
-	else if (proj<0)
-	{
-		return p1;
-	}
-	else
-	{
-		return mulVK(dirn, proj) 
-	}	
-}
-
-var closest;
-
-function SimulationLoop()
-{             
-	Contacts = []
-
-	// Compute collisions
-	for(var j=0;j<States.length;j++)
-	{
-		for(var i=0;i<States.length;i++)
-		{
-			if (i==j)
-				continue
-			ComputeContacts(States[i],States[j])
-		}
-	}
-
-    // apply forces (gravity)	
-    for(var i=0;i<States.length;i++)
-        States[i].v.y += (9.8* intergrationStep) * States[i].M;
-
-
-    // apply constraints
-    var iterations = 4;
-    for(var iter=0;iter<iterations;iter++)
-    {    
-        for(var i=0;i<Links.length;i++)
-        {
-            DistanceConstraint(Links[i])
-        }
-		
-        for(var i=0;i<Contacts.length;i++)
-        {
-            InequalityConstraints(Contacts[i])
-        }
-		
-    }
-
-    // compute tentative velocities
-    integrate(intergrationStep);  
-
-	
-    // render objects and collisions
-    {
-        context= myCanvas.getContext('2d');
-        context.clearRect(0,0,600,600);
-
-        for(var i=0;i<States.length;i++)
-        {
-            drawPoly(context, States[i], "#000000");
-			
-			drawCross(context, States[i].p, .1, "#000080")
-        }					
-				
-		for(var i=0;i<Contacts.length;i++)
-		{
-			drawNormal( Contacts[i].b1.p, Contacts[i].p1, "#00ff00");
-//			drawNormal( Contacts[i].b2.p, Contacts[i].p2, "#0000ff");
-		
-			//drawLine( Contacts[i].p1, addV(Contacts[i].p1, Contacts[i].n1), "#ff0000");
-			drawNormal( Contacts[i].p1, Contacts[i].p2, "#ff0000",2);
-		}	
-    }
-	
-}
-
-function init()
-{
-    // create top hook
-    var cubeVerts = [ new Vector(-1,-1), new Vector(1,-1), new Vector(1,1), new Vector(0, 1), new Vector(-1,1) ];
-    var p = new Frame(10,0, 0*pi/180);
-    var v = new Frame(0,0, 0);
-    States.push( new State(p, v, cubeVerts, 0, 0) );
-
-    // create chain
-    var linkVerts = [ new Vector(0, -0.5), new Vector(-0.1, -0.3), new Vector(-0.1, 0.3), new Vector(0, 0.5), new Vector(0.1, 0.3), new Vector(0.1, -0.3)];    
-    for(var i=0;i<12;i++)
-    {
-        var l = Math.sqrt(.5)
-        var p = new Frame(10+i*l + l*.5,1+i*l + l*.5, -45*pi/180);
-        var v = new Frame(0,0, 0);
-        States.push( new State(p, v, linkVerts, 1, 1) );
-		
-		b1 = States[i];
-		b2 = States[i+1]		
-		Links.push( new Link(b1, b1.b[3], b2, b2.b[0]));	
-    }
-
-	//create random geometry
-	var boxVerts1 = [ new Vector(-6, -1), new Vector(6, -1), new Vector(6, 1), new Vector(-6, 1)];
-	var p = new Frame(10,15, 0*pi/180);
-	var v = new Frame(0,0, 0);
-	States.push( new State(p, v, boxVerts1, 0, 0) );
-
-	for(var j=0;j<2;j++)
-	{
-		var boxVerts2 = [ new Vector(-1, -1), new Vector(1, -1), new Vector(1, 1), new Vector(-1, 1)];
-		var p = new Frame(10,9-2.1*j, 0*pi/180);
-		var v = new Frame(0,0, 0);
-		States.push( new State(p, v, boxVerts2, 1, 1) );
-	}  
-	
-	integrate(0);  
-  
-    setInterval(SimulationLoop,10); 
-}
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 function SegmentIntersection( a, b, c, d)
 {
@@ -541,8 +515,6 @@ function SegmentIntersection( a, b, c, d)
 	
 	return false;	
 }
-
-
 
 function PointInPoly(point, lines)
 {
@@ -594,7 +566,6 @@ function ComputeContacts(s1,s2)
 				if (cm==null)
 					cm = CenterMass(s1.rb);
 				
-				
 				if (SegmentIntersection(cm, s1.rb[i], s2.rb[j], s2.rb[jj]))
 				{									
 					var pt = ProjectToLine(s1.rb[i], s2.rb[j], s2.rb[jj]);
@@ -606,114 +577,177 @@ function ComputeContacts(s1,s2)
 	}
 }
 
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//
+//                                               Integration
+//
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//
+// Integrate step
+//
+function integrate()
+{
+    for(var i=0;i<States.length;i++)
+    {
+        States[i].p = addF(States[i].p , mulF(States[i].v, intergrationStep));       
+        //States[i].v = mulV(States[i].v, 0.98);        
+		
+	    for(var j=0;j<States[i].b.length;j++)
+		{
+			States[i].rb[j] = TransFV(States[i].p, States[i].b[j]);
+		}		
+    }
+}
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//
+//                                               Simulation loop
+//
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+function SimulationLoop()
+{             
+	Contacts = []
+
+	// Compute collisions
+	//
+	for(var j=0;j<States.length;j++)
+	{
+		for(var i=0;i<j;i++)
+		{
+			//  don't check collisions agains oneself
+			if (i==j)
+				continue
+				
+			//  if both objects are static dont check collisions
+			if (States[i].M==0 && States[j].M==0)
+				continue
+			ComputeContacts(States[i],States[j])
+			ComputeContacts(States[j],States[i])
+		}
+	}
+
+    // apply forces (gravity)	
+	//
+    for(var i=0;i<States.length;i++)
+        States[i].v.y += (9.8* intergrationStep) * States[i].M;
+
+    // apply constraints
+    var iterations = 4;
+    for(var iter=0;iter<iterations;iter++)
+    {    
+        for(var i=0;i<Links.length;i++)
+        {
+            DistanceConstraint(Links[i])
+        }
+		
+        for(var i=0;i<Contacts.length;i++)
+        {
+            InequalityConstraints(Contacts[i])
+        }
+		
+    }
+
+    // compute tentative velocities
+	//
+    integrate();  
+
+
+	
+    // render objects and collisions
+	//
+    {
+        context= myCanvas.getContext('2d');
+        context.clearRect(0,0,600,600);
+
+        for(var i=0;i<States.length;i++)
+        {
+            drawPoly(context, States[i], "#000000");
+			
+			drawCross(context, States[i].p, .1, "#000080")
+        }					
+
+		if (showNormals)
+		{
+			for(var i=0;i<Contacts.length;i++)
+			{
+				drawNormal( Contacts[i].p1, Contacts[i].p2, "#ff0000",2);
+			}	
+		}
+    }
+	
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//
+//                                               init
+//
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+function init()
+{
+	States = []
+	Links = []
+
+    // create top hook
+    var cubeVerts = [ new Vector(-1,-1), new Vector(1,-1), new Vector(1,1), new Vector(0, 1), new Vector(-1,1) ];
+    var p = new Frame(10,0, 0*pi/180);
+    var v = new Frame(0,0, 0);
+    States.push( new State(p, v, cubeVerts, 0, 0) );
+
+    // create chain
+    var linkVerts = [ new Vector(0, -0.5), new Vector(-0.1, -0.3), new Vector(-0.1, 0.3), new Vector(0, 0.5), new Vector(0.1, 0.3), new Vector(0.1, -0.3)];    
+    for(var i=0;i<15;i++)
+    {
+        var l = Math.sqrt(.5)
+        var p = new Frame(10+i*l + l*.5,1+i*l + l*.5, -45*pi/180);
+        var v = new Frame(0,0, 0);
+        States.push( new State(p, v, linkVerts, 1, 1) );
+		
+		b1 = States[i];
+		b2 = States[i+1]		
+		Links.push( new Link(b1, b1.b[3], b2, b2.b[0]));	
+    }
+
+	var boxVerts1 = [ new Vector(-9, -1), new Vector(9, -1), new Vector(9, 1), new Vector(-9, 1)];
+	var p = new Frame(9,19, 0*pi/180);
+	var v = new Frame(0,0, 0);
+	States.push( new State(p, v, boxVerts1, 0, 0) );
+
+	var boxVerts1 = [ new Vector(-6, -1), new Vector(6, -1), new Vector(6, 1), new Vector(-6, 1)];
+	var p = new Frame(0,12, 90*pi/180);
+	var v = new Frame(0,0, 0);
+	States.push( new State(p, v, boxVerts1, 0, 0) );
+
+	
+	var r = 1;
+	for(var i=0;i<1;i++)
+	{
+		for(var j=0;j<6;j++)
+		{
+			var boxVerts2 = [ new Vector(-r, -r), new Vector(r, -r), new Vector(r, r), new Vector(-r, r)];
+			var p = new Frame(6 + i*3,17-2.01*r*j, 0*j*10*pi/180);
+			var v = new Frame(0,0, 0);
+			States.push( new State(p, v, boxVerts2, 1, 1) );
+		}  
+	}	
+	    
+}
 
 function showCoords(event, obj) {
     var x = (event.clientX - obj.offsetLeft) / 30;
     var y = (event.clientY - obj.offsetTop) / 30;
 		
-	var boxVerts = [ new Vector(-1, -1), new Vector(3, -1), new Vector(1, 1), new Vector(0, 1), new Vector(-1, 1)];
-	closest = PointInPoly(new Vector(x-10,y-10), boxVerts);
+	mousePosition.x = x;
+	mousePosition.y = y;
 	
-    var coor = closest + " X coords: " + x + ", Y coords: " + y;
+    var coor = " X coords: " + x + ", Y coords: " + y;
     document.getElementById("demo").innerHTML = coor;
 }
 
     
-//
-// Inverts a matrix (taken from http://blog.acipo.com/matrix-inversion-in-javascript/)
-//    
-function invertMat(M){
-    // I use Guassian Elimination to calculate the inverse:
-    // (1) 'augment' the matrix (left) by the identity (on the right)
-    // (2) Turn the matrix on the left into the identity by elemetry row ops
-    // (3) The matrix on the right is the inverse (was the identity matrix)
-    // There are 3 elemtary row ops: (I combine b and c in my code)
-    // (a) Swap 2 rows
-    // (b) Multiply a row by a scalar
-    // (c) addV 2 rows
-    
-    //if the matrix isn't square: exit (error)
-    if(M.length !== M[0].length){return;}
-    
-    //create the identity matrix (I), and a copy (C) of the original
-    var i=0, ii=0, j=0, dim=M.length, e=0, t=0;
-    var I = [], C = [];
-    for(i=0; i<dim; i+=1){
-        // Create the row
-        I[I.length]=[];
-        C[C.length]=[];
-        for(j=0; j<dim; j+=1){
-            
-            //if we're on the diagonal, put a 1 (for identity)
-            if(i==j){ I[i][j] = 1; }
-            else{ I[i][j] = 0; }
-            
-            // Also, make the copy of the original
-            C[i][j] = M[i][j];
-        }
-    }
-    
-    // Perform elementary row operations
-    for(i=0; i<dim; i+=1){
-        // get the element e on the diagonal
-        e = C[i][i];
-        
-        // if we have a 0 on the diagonal (we'll need to swap with a lower row)
-        if(e==0){
-            //look through every row below the i'th row
-            for(ii=i+1; ii<dim; ii+=1){
-                //if the ii'th row has a non-0 in the i'th col
-                if(C[ii][i] != 0){
-                    //it would make the diagonal have a non-0 so swap it
-                    for(j=0; j<dim; j++){
-                        e = C[i][j];       //temp store i'th row
-                        C[i][j] = C[ii][j];//replace i'th row by ii'th
-                        C[ii][j] = e;      //repace ii'th by temp
-                        e = I[i][j];       //temp store i'th row
-                        I[i][j] = I[ii][j];//replace i'th row by ii'th
-                        I[ii][j] = e;      //repace ii'th by temp
-                    }
-                    //don't bother checking other rows since we've swapped
-                    break;
-                }
-            }
-            //get the new diagonal
-            e = C[i][i];
-            //if it's still 0, not invertable (error)
-            if(e==0){return}
-        }
-        
-        // Scale this row down by e (so we have a 1 on the diagonal)
-        for(j=0; j<dim; j++){
-            C[i][j] = C[i][j]/e; //apply to original matrix
-            I[i][j] = I[i][j]/e; //apply to identity
-        }
-        
-        // subVtract this row (scaled appropriately for each row) from ALL of
-        // the other rows so that there will be 0's in this column in the
-        // rows above and below this one
-        for(ii=0; ii<dim; ii++){
-            // Only apply to other rows (we want a 1 on the diagonal)
-            if(ii==i){continue;}
-            
-            // We want to change this element to 0
-            e = C[ii][i];
-            
-            // subVtract (the row above(or below) scaled by e) from (the
-            // current row) but start at the i'th column and assume all the
-            // stuff left of diagonal is 0 (which it should be if we made this
-            // algorithm correctly)
-            for(j=0; j<dim; j++){
-                C[ii][j] -= e*C[i][j]; //apply to original matrix
-                I[ii][j] -= e*I[i][j]; //apply to identity
-            }
-        }
-    }
-    
-    //we've done all operations, C should be the identity
-    //matrix I should be the inverse:
-    return I;
-}    
 </script>
 
 <!DOCTYPE html>
@@ -721,7 +755,6 @@ function invertMat(M){
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 <title>HTML5 Physics simulation</title>
-</script>
 <script>
   (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
   (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
@@ -742,11 +775,13 @@ h1 { display:block; width:600px; margin:20px auto; paddVing-bottom:20px; font:no
 -->
 </style>
 </head>
-<body onload="init()">
+<body onload="init();setInterval(SimulationLoop,5); ">
 <h1>Rigid body simulator with equality and inequality constraints</h1>
 <div id="container">
 	
 <canvas id="myCanvas" width="600" height="600" onmousemove="showCoords(event, this)"></canvas>
+<input type="button" value="Reset" onclick="init();" /><br>
+<input type="checkbox" id="chbx" onchange="showNormals = document.getElementById('chbx').checked; ">Show normals<br>
 
 <p id="demo"></p>
 

@@ -54,7 +54,6 @@ function drawCross(context, p, radius, color)
 
 function drawPoly(context, state, color)
 {
-
     for(var i=0;i<state.b.length-1;i++)
     {
         var p1 = TransFV(state.p, state.b[i]);
@@ -71,12 +70,8 @@ function drawLine( p1,p2)
 {
     context.beginPath();
     context.fillStyle="#ff0000";
-    x = p1.x*30;
-    y = p1.y*30;
-    context.moveTo(x,y);
-    x = p2.x*30;
-    y = p2.y*30;
-    context.lineTo(x,y);       
+    context.moveTo(p1.x*30,p1.y*30);
+    context.lineTo(p2.x*30,p2.y*30);       
     context.stroke();
 }
 
@@ -96,9 +91,6 @@ function MulMatFF(m1, m2)
             for(var k=0;k<m1[i].length;k++)
             {
                 tmp += dotF(m1[j][k], m2[k][i]);
-                
-                //tmp += dotV(m1[j][k], m2[k][i]);
-                //tmp += (m1[j][k] * m2[k][i]);
             }
             O[j][i] = tmp;
         }
@@ -146,7 +138,6 @@ function MulMatKK(m1, m2)
     return O;  
 }
 
-
 //
 // multiply 2 matrices, one made out of vectors and the other made out of scalars
 //
@@ -162,7 +153,6 @@ function MulMatFK(m1, m2)
             for(var k=0;k<m1[i].length;k++)
             {
                 tmp = addF(mulF(m1[j][k], m2[k][i]), tmp);
-                //tmp = addV(mulV(m1[j][k], m2[k][i]), tmp);
             }
             O[j][i] = tmp;
         }
@@ -213,24 +203,15 @@ function GetMinvJtlambda(J, Minv, velT, bias)
     var JvelT = MulMatFF(J, velT); 
 
     if (bias!=undefined)
-    {
         JvelT = addVMatKK(JvelT, bias);
-    }
 
     var Jt = TransposeMat(J);
-    
     var MinvJt =  MulMatSF(Minv, Jt);
-  
     var JJt = MulMatFF(J, MinvJt ); 
-
     var invJJt = invertMat( JJt );
-   
     var lambda = MulMatKK( invJJt, JvelT);
-    
     var Jtlambda = MulMatFK( Jt, lambda);
-
     var MinvJtlambda = MulMatSF(Minv, Jtlambda);
-       
     return MinvJtlambda;
 }
 

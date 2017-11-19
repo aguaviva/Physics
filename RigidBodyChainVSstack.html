@@ -12,15 +12,10 @@
   ga('send', 'pageview');
 </script>
 <style type="text/css">
-<!--
 body { background-color:#ededed; font:norm2al 12px/18px Arial, Helvetica, sans-serif; }
 h1 { display:block; width:600px; margin:20px auto; paddVing-bottom:20px; font:norm2al 24px/30px Georgia, "Times New Roman", Times, serif; color:#333; text-shadow: 1px 2px 3px #ccc; border-bottom:1px solid #cbcbcb; }
 #container { width:600px; margin:0 auto; }
 #myCanvas { background:#fff; border:1px solid #cbcbcb; }
-#nav { display:block; width:100%; text-align:center; }
-#nav li { display:block; font-weight:bold; line-height:21px; text-shadow:1px 1px 1px #fff; width:100px; height:21px; paddVing:5px; margin:0 10px; background:#e0e0e0; border:1px solid #ccc; -moz-border-radius:4px;-webkit-border-radius:4px; border-radius:4px; float:left; }
-#nav li a { color:#000; display:block; text-decoration:none; width:100%; height:100%; }
--->
 </style>
 <script type="text/javascript">
 
@@ -48,6 +43,12 @@ function mulF(a,k)      { return new Frame(a.x*k, a.y*k, a.r*k); }
 function dotF(a,b)      { return a.x*b.x+a.y*b.y+a.r*b.r; }
 function TransFV(f,p)   { return addV(f, RotV(f.r, p) ); }
 function InvTransFV(f,p)   { return RotV(-f.r, subV(p, f) ); }
+function ApplyForceF(f, point, force)
+{
+  f.v.x += force.x;
+  f.v.y += force.y;
+  f.v.r += crossVV(subV(point, f.p), force);
+}
 
 // velocities, positions and radius
 function State(pos, vel, body, invMass, invI) { this.p = pos; this.v = vel; this.b = body; this.rb = []; this.M=invMass; this.I = invI;  }
@@ -79,6 +80,14 @@ var context;
 
 var pickedPoint = new Vector(0,0);
 var pickedObject = -1;
+
+function CreateState(px, py, rot, geom, invMass, invI)
+{
+  var p = new Frame(px,py, rot);
+  var v = new Frame( 0, 0, 0);
+  States.push( new State(p, v, geom, invMass, invI ));
+}
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
 //                                               Drawing helpers
@@ -616,14 +625,14 @@ function SimulationLoop()
   for(var i=0;i<States.length;i++)
     States[i].v.y += (9.8* intergrationStep) * States[i].M;
 
+  // When an object is picked add a springy (k*distance) force between the mouse and the object
 	if (pickedObject>=0)
 	{
 		var state = States[pickedObject];
 		var p = TransFV(state.p, pickedPoint);
 		var distance = subV(mousePosition, p);
-		var torque = crossVV(subV(p, state.p), distance);
-		var force  = mulV(distance, 0.1)
-		state.v = addF(state.v, new FrameV(force, (torque*0.1)));
+		var force  = mulV(distance, 0.1);
+    ApplyForceF(state, p, force);
 	}
 
   // apply constraints
@@ -639,7 +648,6 @@ function SimulationLoop()
     {
       InequalityConstraints(Contacts[i])
     }
-
   }
 
   // compute tentative velocities
@@ -655,7 +663,7 @@ function SimulationLoop()
 		{
 			var state = States[pickedObject];
 			var p = TransFV(state.p, pickedPoint);
-			drawCross(p, .1, "#000080")
+			drawLine(p, mousePosition, "#000080")
 		}
 
     for(var i=0;i<States.length;i++)
@@ -693,10 +701,8 @@ function init()
 
   // create top hook
 	//
-  var cubeVerts = [ new Vector(-1,-1), new Vector(1,-1), new Vector(1,1), new Vector(0, 1), new Vector(-1,1) ];
-  var p = new Frame(10, 0, 0);
-  var v = new Frame( 0, 0, 0);
-  States.push( new State(p, v, cubeVerts, 0, 0) );
+  var hookVerts = [ new Vector(-1,-1), new Vector(1,-1), new Vector(1,1), new Vector(0, 1), new Vector(-1,1) ];
+  CreateState(10,0,0,hookVerts,0,0);
 
   // create chain
 	//
@@ -705,9 +711,7 @@ function init()
   for(var i=0;i<13;i++)
   {
     var l = Math.sqrt(.5)
-    var p = new Frame(10+i*l + l*.5,1+i*l + l*.5, DegToRad(-45));
-    var v = new Frame(0,0, 0);
-    States.push( new State(p, v, linkVerts, 1, 1) );
+    CreateState(10+i*l + l*.5,1+i*l + l*.5, DegToRad(-45),linkVerts,1,1);
 
 		b1 = States[i];
 		b2 = States[i+1]
@@ -716,28 +720,21 @@ function init()
 
 	// ground
 	//
-	var boxVerts1 = [ new Vector(-9, -1), new Vector(9, -1), new Vector(9, 1), new Vector(-9, 1)];
-	var p = new Frame(9,19, DegToRad(0));
-	var v = new Frame(0, 0, 0);
-	States.push( new State(p, v, boxVerts1, 0, 0) );
+	var groundVerts = [ new Vector(-10, -1), new Vector(10, -1), new Vector(10, 1), new Vector(-10, 1)];
+  CreateState(10,19, DegToRad(0),groundVerts,0,0);
 
-	// left wall
+	// left/right wall
 	//
-	var boxVerts1 = [ new Vector(-6, -1), new Vector(6, -1), new Vector(6, 1), new Vector(-6, 1)];
-	var p = new Frame(0, 12, DegToRad(90));
-	var v = new Frame(0, 0, 0);
-	States.push( new State(p, v, boxVerts1, 0, 0) );
+	var wallVerts = [ new Vector(-6, -1), new Vector(6, -1), new Vector(6, 1), new Vector(-6, 1)];
+  CreateState( 0,12, DegToRad(90),wallVerts,0,0);
+  CreateState(20,12, DegToRad(90),wallVerts,0,0);
 
 	// create stack
 	//
 	var r = 1;
-	var boxVerts2 = [ new Vector(-r, -r), new Vector(r, -r), new Vector(r, r), new Vector(-r, r)];
+	var boxVerts = [ new Vector(-r, -r), new Vector(r, -r), new Vector(r, r), new Vector(-r, r)];
 	for(var j=0;j<6;j++)
-	{
-		var p = new Frame(6 ,17-2.8*r*j, DegToRad(0*j*10));
-		var v = new Frame(0, 0, 0);
-		States.push( new State(p, v, boxVerts2, 1, 1) );
-	}
+    CreateState(6 ,17-2.8*r*j, DegToRad(0*j*10),boxVerts,1,1);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -745,7 +742,6 @@ function init()
 //                                            mouse handlers
 //
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 
 function onMouseUp(event)
 {
@@ -766,7 +762,7 @@ function onMouseDown(event)
 	pickedObject = -1;
 }
 
-function showCoords(event, obj)
+function onMouseMove(event)
 {
 	var rect = myCanvas.getBoundingClientRect();
   mousePosition.x = (event.clientX - rect.left) / 30;
@@ -777,7 +773,7 @@ function showCoords(event, obj)
 <body onload="init();setInterval(SimulationLoop,5); ">
 <h1>Rigid body simulator featuring equality and inequality constraints</h3>
 <div id="container">
-<canvas id="myCanvas" width="600" height="600" onmouseup="onMouseUp(event)" onmousedown="onMouseDown(event)" onmousemove="showCoords(event, this)"></canvas>
+<canvas id="myCanvas" width="600" height="600" onmouseup="onMouseUp(event)" onmousedown="onMouseDown(event)" onmousemove="onMouseMove(event)"></canvas>
 <input type="button" value="Reset" onclick="init();" /><br>
 <input type="checkbox" id="chbx" onchange="showNormals = document.getElementById('chbx').checked; ">Show normals<br>
 <p id="demo"></p>

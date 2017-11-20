@@ -21,6 +21,9 @@ h1 { display:block; width:600px; margin:20px auto; paddVing-bottom:20px; font:no
 
 var PI = 3.14159265359;
 function DegToRad(a) {return a*PI/180.0 }
+function max(a,b) { return a>b?a:b; }
+function min(a,b) { return a<b?a:b; }
+function clamp(a,b) { return a>b?b:a<-b?-b:a; }
 
 //Vector class + math
 function Vector(x,y)  { this.x = x; this.y = y; }
@@ -40,6 +43,7 @@ function FrameV(v, r)   { this.x = v.x; this.y = v.y; this.r = r; }
 function addF(a,b)      { return new Frame(a.x+b.x, a.y+b.y, a.r+b.r); }
 function subF(a,b)      { return new Frame(a.x-b.x, a.y-b.y, a.r-b.r); }
 function mulF(a,k)      { return new Frame(a.x*k, a.y*k, a.r*k); }
+function clampF(a,b)    { return new Frame(clamp(a.x, b.x), clamp(a.y, b.y), clamp(a.r, b.r)); }
 function dotF(a,b)      { return a.x*b.x+a.y*b.y+a.r*b.r; }
 function TransFV(f,p)   { return addV(f, RotV(f.r, p) ); }
 function InvTransFV(f,p)   { return RotV(-f.r, subV(p, f) ); }
@@ -73,6 +77,8 @@ var Links = [];
 var States = [];
 var intergrationStep = 1./(24*5);
 var CoefficientOfRestitution = .5;
+var RestitutionCoefficient = 1;
+var frictionCoefficient = 1;
 var showNormals = null;
 
 var mousePosition = new Vector(0,0);
@@ -480,7 +486,58 @@ function InequalityConstraints(pair)
 	// update speeds-----------------
 	pair.b1.v = subF(pair.b1.v, MinvJtlambda[0][0]);
 	pair.b2.v = subF(pair.b2.v, MinvJtlambda[1][0]);
+		
+	//return lambda for friction
+	return [MinvJtlambda[0][0], MinvJtlambda[1][0]];
 }
+
+//
+// Friction solver
+//
+function FrictionConstraints(pair, lambdaNormal)
+{
+	normal = mulV(pair.n1, 1/lengthV(pair.n1));
+    var tangent = mulV(ortoV(normal),1);
+
+    // compute bias---------------
+    var betaoverh = (.1/intergrationStep);	
+	var tangent = mulV(ortoV(pair.n1),1);
+    var C = dotV(subV(pair.p1, pair.p2), tangent );	
+	var vrel = subV(getVelS(pair.b1, pair.p1), getVelS(pair.b2, pair.p2))
+    var Cdot = dotV( vrel, tangent);
+    var bias = [[betaoverh * C + Cdot*RestitutionCoefficient]];
+
+	// compute jacobian---------
+	var J = []
+    
+    var CaPa = subV(pair.p1, pair.b1.p);
+    var CbPb = subV(pair.p2, pair.b2.p);
+
+	J[0] = [ new Frame( tangent.x,  tangent.y,   crossVV(CaPa, tangent)), 
+	         new Frame(-tangent.x, -tangent.y,  -crossVV(CbPb, tangent))];
+
+    // compute vels--------------
+    var vel = [[ pair.b1.v, pair.b2.v ]];
+    var velT = TransposeMat(vel);
+
+    //just the diagonal matrix -----
+    var Minv = [ pair.b1, pair.b2 ];
+	
+    // solver-----------------------
+    var MinvJtlambda = GetMinvJtlambda(J, Minv, velT, bias)    
+    
+	//MinvJtlambda[0][0] = clampF(MinvJtlambda[0][0], mulF(lambdaNormal[0], frictionCoefficient));
+	//MinvJtlambda[1][0] = clampF(MinvJtlambda[1][0], mulF(lambdaNormal[1], frictionCoefficient));
+	
+	//limit the constraint force
+    MinvJtlambda[0][0] = mulF(MinvJtlambda[0][0], 0.01);
+    MinvJtlambda[1][0] = mulF(MinvJtlambda[1][0], 0.01);
+    
+    // update speeds-----------------
+    pair.b1.v = subF(pair.b1.v, MinvJtlambda[0][0]);
+    pair.b2.v = subF(pair.b2.v, MinvJtlambda[1][0]);   
+}
+
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -646,7 +703,8 @@ function SimulationLoop()
 
 		for(var i=0;i<Contacts.length;i++)
 		{
-			InequalityConstraints(Contacts[i])
+			var lambdaNormal = InequalityConstraints(Contacts[i])
+			FrictionConstraints(Contacts[i], lambdaNormal);
 		}
 	}
 
@@ -771,7 +829,7 @@ function onMouseMove(event)
 </script>
 </head>
 <body onload="init();setInterval(SimulationLoop,5); ">
-<h1>Rigid body simulator links and resting constraints (no friction)</h3>
+<h1>Rigid body simulator featuring links, friction and resting constraints</h3>
 <div id="container">
 <canvas id="myCanvas" width="600" height="600" onmouseup="onMouseUp(event)" onmousedown="onMouseDown(event)" onmousemove="onMouseMove(event)"></canvas>
 <input type="button" value="Reset" onclick="init();" /><br>
@@ -779,8 +837,16 @@ function onMouseMove(event)
 <p id="demo"></p>
 <h2>Intro</h2>
 This is a quick exercise to learn how constraints work in a physics simulator.</br>
+<p>It features the following constraints:
+<ul>
+	<li>linkages</li>
+	<li>friction</li>
+	<li>resting</li>
+</ul>
+</p>
 </br>
 This physics simulator is heavily based on Erin Catto's GDC2009 talk.</br>
+</br>
 </br>
 <h2>Contact/Questions:</h2>
  &lt;my_github_account_username&gt;@gmail.com.

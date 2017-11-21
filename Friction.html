@@ -23,7 +23,7 @@ var PI = 3.14159265359;
 function DegToRad(a) {return a*PI/180.0 }
 function max(a,b) { return a>b?a:b; }
 function min(a,b) { return a<b?a:b; }
-function clamp(a,b) { return a>b?b:a<-b?-b:a; }
+function clamp(a,l) { l=Math.abs(l); if (a>=l) a=l; if (a<=-l) a=-l; return a; }
 
 //Vector class + math
 function Vector(x,y)  { this.x = x; this.y = y; }
@@ -42,7 +42,8 @@ function Frame(x, y, r) { this.x = x; this.y = y; this.r = r; }
 function FrameV(v, r)   { this.x = v.x; this.y = v.y; this.r = r; }
 function addF(a,b)      { return new Frame(a.x+b.x, a.y+b.y, a.r+b.r); }
 function subF(a,b)      { return new Frame(a.x-b.x, a.y-b.y, a.r-b.r); }
-function mulF(a,k)      { return new Frame(a.x*k, a.y*k, a.r*k); }
+function mulFK(a,k)      { return new Frame(a.x*k, a.y*k, a.r*k); }
+function maxF(a)        { return new Frame(max(a.x,0), max(a.y,0), max(a.r,0)); }
 function clampF(a,b)    { return new Frame(clamp(a.x, b.x), clamp(a.y, b.y), clamp(a.r, b.r)); }
 function dotF(a,b)      { return a.x*b.x+a.y*b.y+a.r*b.r; }
 function TransFV(f,p)   { return addV(f, RotV(f.r, p) ); }
@@ -78,7 +79,7 @@ var States = [];
 var intergrationStep = 1./(24*5);
 var CoefficientOfRestitution = .5;
 var RestitutionCoefficient = 1;
-var frictionCoefficient = 1;
+var frictionCoefficient = .9;
 var showNormals = null;
 
 var mousePosition = new Vector(0,0);
@@ -232,7 +233,7 @@ function MulMatFK(m1, m2)
 			var tmp = new Frame(0,0,0);
 			for(var k=0;k<m1[i].length;k++)
 			{
-				tmp = addF(mulF(m1[j][k], m2[k][i]), tmp);
+				tmp = addF(mulFK(m1[j][k], m2[k][i]), tmp);
 			}
 			O[j][i] = tmp;
 		}
@@ -380,24 +381,37 @@ function invertMat(M){
 //
 // Get Jtranspose * lambda
 //
-function GetMinvJtlambda(J, Minv, velT, bias)
+function GetMinvJtlambda(J, invM, velT, bias, pair)
 {
-	var JvelT = MulMatFF(J, velT);
+	var J_velT = MulMatFF(J, velT);
 
 	if (bias!=undefined)
-	{
-		JvelT = addVMatKK(JvelT, bias);
-	}
+		J_velT = addVMatKK(J_velT, bias);
 
 	var Jt = TransposeMat(J);
-	var MinvJt =  MulMatSF(Minv, Jt);
-	var JJt = MulMatFF(J, MinvJt );
-	var invJJt = invertMat( JJt );
-	var lambda = MulMatKK( invJJt, JvelT);
-	var Jtlambda = MulMatFK( Jt, lambda);
-	var MinvJtlambda = MulMatSF(Minv, Jtlambda);
-
-	return MinvJtlambda;
+	var invM_Jt =  MulMatSF(invM, Jt);
+	var J_invM_Jt = MulMatFF(J, invM_Jt );
+	var invJJt = invertMat( J_invM_Jt );
+	var lambda = MulMatKK( invJJt, J_velT);
+	lambda = [[-lambda[0][0]]];
+	
+	if (pair!= undefined)
+	{
+		if (pair.lambda != undefined)
+		{
+			lambda = [[pair.lambda[0][0] + lambda[0][0]]];
+			
+			lambdaPositive = [[ Math.max(lambda[0][0], 0) ]];
+			
+			lambda = [[lambdaPositive[0][0] - pair.lambda[0][0] ]];
+					
+			pair.lambda = lambdaPositive;		
+		}
+	}
+	
+	var Jt_lambda = MulMatFK( Jt, lambda);
+	var invM_Jt_lambda = MulMatSF(invM, Jt_lambda);
+	return invM_Jt_lambda;	
 }
 
 //
@@ -447,8 +461,8 @@ function DistanceConstraint(link)
 	var MinvJtlambda = GetMinvJtlambda(J, Minv, velT, bias)
 
 	// update speeds-----------------
-	link.b1.v = subF(link.b1.v, MinvJtlambda[0][0]);
-	link.b2.v = subF(link.b2.v, MinvJtlambda[1][0]);
+	link.b1.v = addF(link.b1.v, MinvJtlambda[0][0]);
+	link.b2.v = addF(link.b2.v, MinvJtlambda[1][0]);
 }
 
 //
@@ -481,11 +495,11 @@ function InequalityConstraints(pair)
 	var Minv = [ pair.b1, pair.b2 ];
 
 	// solver-----------------------
-	var MinvJtlambda = GetMinvJtlambda(J, Minv, velT, bias)
+	var MinvJtlambda = GetMinvJtlambda(J, Minv, velT, bias, pair)
 
 	// update speeds-----------------
-	pair.b1.v = subF(pair.b1.v, MinvJtlambda[0][0]);
-	pair.b2.v = subF(pair.b2.v, MinvJtlambda[1][0]);
+	pair.b1.v = addF(pair.b1.v, MinvJtlambda[0][0]);
+	pair.b2.v = addF(pair.b2.v, MinvJtlambda[1][0]);
 		
 	//return lambda for friction
 	return [MinvJtlambda[0][0], MinvJtlambda[1][0]];
@@ -524,18 +538,18 @@ function FrictionConstraints(pair, lambdaNormal)
     var Minv = [ pair.b1, pair.b2 ];
 	
     // solver-----------------------
-    var MinvJtlambda = GetMinvJtlambda(J, Minv, velT, bias)    
+    var MinvJtlambda = GetMinvJtlambda(J, Minv, velT, bias, undefined)    
     
 	//MinvJtlambda[0][0] = clampF(MinvJtlambda[0][0], mulF(lambdaNormal[0], frictionCoefficient));
 	//MinvJtlambda[1][0] = clampF(MinvJtlambda[1][0], mulF(lambdaNormal[1], frictionCoefficient));
 	
 	//limit the constraint force
-    MinvJtlambda[0][0] = mulF(MinvJtlambda[0][0], 0.01);
-    MinvJtlambda[1][0] = mulF(MinvJtlambda[1][0], 0.01);
+    MinvJtlambda[0][0] = mulFK(MinvJtlambda[0][0], 0.02);
+    MinvJtlambda[1][0] = mulFK(MinvJtlambda[1][0], 0.02);
     
     // update speeds-----------------
-    pair.b1.v = subF(pair.b1.v, MinvJtlambda[0][0]);
-    pair.b2.v = subF(pair.b2.v, MinvJtlambda[1][0]);   
+    pair.b1.v = addF(pair.b1.v, MinvJtlambda[0][0]);
+    pair.b2.v = addF(pair.b2.v, MinvJtlambda[1][0]);   
 }
 
 
@@ -644,7 +658,7 @@ function integrate()
 {
 	for(var i=0;i<States.length;i++)
 	{
-		States[i].p = addF(States[i].p , mulF(States[i].v, intergrationStep));
+		States[i].p = addF(States[i].p , mulFK(States[i].v, intergrationStep));
 
 		for(var j=0;j<States[i].b.length;j++)
 		{
@@ -690,6 +704,11 @@ function SimulationLoop()
 		var distance = subV(mousePosition, p);
 		var force  = mulV(distance, 0.1);
 		ApplyForceF(state, p, force);
+	}
+
+	for(var i=0;i<Contacts.length;i++)
+	{
+		Contacts[i].lambda = [[0]];
 	}
 
 	// apply constraints
@@ -791,8 +810,10 @@ function init()
 	//
 	var r = 1;
 	var boxVerts = [ new Vector(-r, -r), new Vector(r, -r), new Vector(r, r), new Vector(-r, r)];
-	for(var j=0;j<6;j++)
-	CreateState(6 ,17-2.8*r*j, DegToRad(0*j*10),boxVerts,1,1);
+	for(var j=0;j<8;j++)
+		CreateState(6 ,17-2.8*r*j, DegToRad(0*j*10),boxVerts,1,1);
+		
+	//CreateState(6 ,17-2.8*r, DegToRad(20),boxVerts,1,1);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -840,14 +861,11 @@ This is a quick exercise to learn how constraints work in a physics simulator.</
 <p>It features the following constraints:
 <ul>
 	<li>linkages</li>
-	<li>friction</li>
-	<li>resting</li>
+	<li>friction, using a basic model, not using static & dynamic friction(but working on it!)</li>
+	<li>resting, enforces using Antonio Signorini to conditions and handles multiple contacts</li>
 </ul>
 </p>
-</br>
 This physics simulator is heavily based on Erin Catto's GDC2009 talk.</br>
-</br>
-</br>
 <h2>Contact/Questions:</h2>
  &lt;my_github_account_username&gt;@gmail.com.
 </br>

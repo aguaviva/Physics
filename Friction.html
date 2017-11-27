@@ -77,9 +77,9 @@ var Contacts = []
 var Links = [];
 var States = [];
 var intergrationStep = 1./(24*5);
-var CoefficientOfRestitution = .5;
+var CoefficientOfRestitution = .1;
 var RestitutionCoefficient = 1;
-var frictionCoefficient = .9;
+var frictionCoefficient = .03;
 var showNormals = null;
 
 var mousePosition = new Vector(0,0);
@@ -378,10 +378,7 @@ function invertMat(M){
   return I;
 }
 
-//
-// Get Jtranspose * lambda
-//
-function GetMinvJtlambda(J, invM, velT, bias, pair)
+function GetLambda(J, invM, velT, bias)
 {
 	var J_velT = MulMatFF(J, velT);
 
@@ -393,26 +390,18 @@ function GetMinvJtlambda(J, invM, velT, bias, pair)
 	var J_invM_Jt = MulMatFF(J, invM_Jt );
 	var invJJt = invertMat( J_invM_Jt );
 	var lambda = MulMatKK( invJJt, J_velT);
-	lambda = [[-lambda[0][0]]];
 	
-	if (pair!= undefined)
-	{
-		if (pair.lambda != undefined)
-		{
-			lambda = [[pair.lambda[0][0] + lambda[0][0]]];
-			
-			lambdaPositive = [[ Math.max(lambda[0][0], 0) ]];
-			
-			lambda = [[lambdaPositive[0][0] - pair.lambda[0][0] ]];
-					
-			pair.lambda = lambdaPositive;		
-		}
-	}
-	
+	return [[-lambda[0][0]]];
+}
+
+function GetMinvJtlambda(invM, J, lambda)
+{
+	var Jt = TransposeMat(J);
 	var Jt_lambda = MulMatFK( Jt, lambda);
 	var invM_Jt_lambda = MulMatSF(invM, Jt_lambda);
 	return invM_Jt_lambda;	
 }
+
 
 //
 // Compute velocity corrections to satisfy a distance constraint
@@ -455,14 +444,15 @@ function DistanceConstraint(link)
 	var velT = TransposeMat(vel);
 
 	//just the diagonal matrix -----
-	var Minv = [ link.b1, link.b2 ];
+	var invM = [ link.b1, link.b2 ];
 
 	// solver-----------------------
-	var MinvJtlambda = GetMinvJtlambda(J, Minv, velT, bias)
+	var lambda = GetLambda(J, invM, velT, bias);
+	var invMJtlambda = GetMinvJtlambda(invM, J, lambda);	
 
 	// update speeds-----------------
-	link.b1.v = addF(link.b1.v, MinvJtlambda[0][0]);
-	link.b2.v = addF(link.b2.v, MinvJtlambda[1][0]);
+	link.b1.v = addF(link.b1.v, invMJtlambda[0][0]);
+	link.b2.v = addF(link.b2.v, invMJtlambda[1][0]);
 }
 
 //
@@ -492,17 +482,35 @@ function InequalityConstraints(pair)
 	var velT = TransposeMat(vel);
 
 	//just the diagonal matrix -----
-	var Minv = [ pair.b1, pair.b2 ];
+	var invM = [ pair.b1, pair.b2 ];
 
 	// solver-----------------------
-	var MinvJtlambda = GetMinvJtlambda(J, Minv, velT, bias, pair)
+	var lambda = GetLambda(J, invM, velT, bias);
+
+	if (pair!= undefined)
+	{
+		if (pair.lambdaAcc != undefined)
+		{
+			lambda = [[pair.lambdaAcc[0][0] + lambda[0][0]]];
+			
+			lambdaPositive = [[ Math.max(lambda[0][0], 0) ]];
+			
+			lambda = [[lambdaPositive[0][0] - pair.lambdaAcc[0][0] ]];
+			
+
+			pair.lambda = lambda;
+			pair.lambdaAcc = lambdaPositive;		
+		}
+	}
+
+	var invMJtlambda = GetMinvJtlambda(invM, J, lambda);	
 
 	// update speeds-----------------
-	pair.b1.v = addF(pair.b1.v, MinvJtlambda[0][0]);
-	pair.b2.v = addF(pair.b2.v, MinvJtlambda[1][0]);
+	pair.b1.v = addF(pair.b1.v, invMJtlambda[0][0]);
+	pair.b2.v = addF(pair.b2.v, invMJtlambda[1][0]);
 		
 	//return lambda for friction
-	return [MinvJtlambda[0][0], MinvJtlambda[1][0]];
+	return [invMJtlambda[0][0], invMJtlambda[1][0]];
 }
 
 //
@@ -535,21 +543,18 @@ function FrictionConstraints(pair, lambdaNormal)
     var velT = TransposeMat(vel);
 
     //just the diagonal matrix -----
-    var Minv = [ pair.b1, pair.b2 ];
+    var invM = [ pair.b1, pair.b2 ];
 	
     // solver-----------------------
-    var MinvJtlambda = GetMinvJtlambda(J, Minv, velT, bias, undefined)    
-    
-	//MinvJtlambda[0][0] = clampF(MinvJtlambda[0][0], mulF(lambdaNormal[0], frictionCoefficient));
-	//MinvJtlambda[1][0] = clampF(MinvJtlambda[1][0], mulF(lambdaNormal[1], frictionCoefficient));
+	var lambda = GetLambda(J, invM, velT, bias);
 	
-	//limit the constraint force
-    MinvJtlambda[0][0] = mulFK(MinvJtlambda[0][0], 0.02);
-    MinvJtlambda[1][0] = mulFK(MinvJtlambda[1][0], 0.02);
+	lambda = [[ clamp(lambda[0][0], pair.lambda[0][0] * frictionCoefficient) ]]
+	
+	var invMJtlambda = GetMinvJtlambda(invM, J, lambda);	   
     
     // update speeds-----------------
-    pair.b1.v = addF(pair.b1.v, MinvJtlambda[0][0]);
-    pair.b2.v = addF(pair.b2.v, MinvJtlambda[1][0]);   
+    pair.b1.v = addF(pair.b1.v, invMJtlambda[0][0]);
+    pair.b2.v = addF(pair.b2.v, invMJtlambda[1][0]);   
 }
 
 
@@ -708,7 +713,7 @@ function SimulationLoop()
 
 	for(var i=0;i<Contacts.length;i++)
 	{
-		Contacts[i].lambda = [[0]];
+		Contacts[i].lambdaAcc = [[0]];
 	}
 
 	// apply constraints
@@ -810,10 +815,9 @@ function init()
 	//
 	var r = 1;
 	var boxVerts = [ new Vector(-r, -r), new Vector(r, -r), new Vector(r, r), new Vector(-r, r)];
-	for(var j=0;j<8;j++)
+	for(var j=0;j<6;j++)
 		CreateState(6 ,17-2.8*r*j, DegToRad(0*j*10),boxVerts,1,1);
 		
-	//CreateState(6 ,17-2.8*r, DegToRad(20),boxVerts,1,1);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

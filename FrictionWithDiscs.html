@@ -76,10 +76,10 @@ function Contact(b1, b2, p1, n1, p2)
 var Contacts = []
 var Links = [];
 var States = [];
-var intergrationStep = 1./(24*5);
+var intergrationStep = 1./(24*6);
 var CoefficientOfRestitution = .1;
 var RestitutionCoefficient = 1;
-var frictionCoefficient = .03;
+var frictionCoefficient = .06;
 var showNormals = null;
 
 var mousePosition = new Vector(0,0);
@@ -103,6 +103,7 @@ function CreateState(px, py, rot, geom, invMass, invI)
 
 function moveTo(p) { context.moveTo(p.x*30,p.y*30); }
 function lineTo(p) { context.lineTo(p.x*30,p.y*30); }
+function circle(p) { context.arc(p.x*30,p.y*30, 30, 0, 2*Math.PI, false);  }
 
 function drawLine( p1,p2, color)
 {
@@ -126,6 +127,20 @@ function drawPoly(state, color)
 	moveTo(state.rb[0])
 	for(var i=1;i<state.b.length;i++)
 		lineTo(state.rb[i])
+	context.closePath();
+    
+	context.stroke();
+}
+
+function drawDisc(state, color)
+{
+	context.beginPath();
+	context.strokeStyle=(color==null)?"#000000":color;
+    circle(state.rb[0]); 
+    moveTo(state.p)
+    lineTo(addV(state.p, new Vector(Math.cos(state.p.r),Math.sin(state.p.r))))
+
+    
 	context.closePath();
 	context.stroke();
 }
@@ -588,6 +603,13 @@ function SegmentIntersection( a, b, c, d)
 //
 function PointInPoly(point, lines)
 {
+    
+    if (lines.length==1)
+    {
+        //it is a disc
+        return lengthV(subV(point,lines[0]))<=1;
+    }
+
 	var outer = null;
 	var dist = 10000000;
 
@@ -626,9 +648,20 @@ function ProjectPointToLine(p, a,b)
 	return pt;
 }
 
-//
-// Given two bodies compute collisions and penetrations
-//
+function ClosesPointToSegment(p, a,b)
+{
+	ab = subV(b, a);
+    var l = lengthV(ab)
+	var abn = mulV(ab,1/l);
+	ap = subV(p, a);
+	pr = dotV(abn, ap)
+ 
+   if (pr<0) return a;
+    if (pr>l) return b;
+    
+    return addV(mulV(abn,pr),a);
+}
+
 function ComputeBoxBoxContacts(s1,s2)
 {
     // box box collision
@@ -657,6 +690,67 @@ function ComputeBoxBoxContacts(s1,s2)
         var ss = s1;
         s1=s2;
         s2=ss;
+    }
+}
+
+function ComputeDiscBoxContacts(d,s)
+{
+    var minDist = 100000
+    var minPt = null;
+    var minN = null;
+    for (var j = 0; j < s.rb.length; j++)
+    {
+        var jj = j+1; if (jj >= s.rb.length) jj = 0;
+        var pt = ClosesPointToSegment(d.rb[0], s.rb[j], s.rb[jj]);
+        
+        var dist = lengthV(subV(pt, d.rb[0]))
+        
+        if (dist<minDist)
+        {
+            minDist=dist;
+            minPt = pt;
+        }            
+    }
+    
+    if (minPt!=null && minDist<1)
+    {
+        var normal = subV(d.rb[0], minPt);            
+        normal = mulV(normal,1/lengthV(normal));             
+        var p = addV(d.rb[0], mulV(normal, -1))
+        Contacts.push(new Contact(d,s, p, normal, minPt));
+    }        
+}
+
+function ComputeDiscDiscContacts(d1,d2)
+{
+    n = subV(d1.p, d2.p);
+    var dist = lengthV(n)
+    if (dist<2)
+    {
+        var normal = mulV(n, 1/dist)
+        var p1 = addV(d1.rb[0], mulV(normal, -1))
+        var p2 = addV(d2.rb[0], mulV(normal, 1))
+        Contacts.push(new Contact(d1,d2, p1, normal, p2));
+    }
+}
+
+
+//
+// Given two bodies compute collisions and penetrations
+//
+function ComputeContacts(s1,s2)
+{
+    if (s1.rb.length>1 && s2.rb.length>1)
+    {
+        ComputeBoxBoxContacts(s1,s2) 
+    }
+    else if (s1.rb.length==1 && s2.rb.length>1)
+    {
+        ComputeDiscBoxContacts(s1,s2)
+    }
+    else if (s1.rb.length==1 && s2.rb.length==1)
+    {
+        ComputeDiscDiscContacts(s1,s2);
     }
 }
 
@@ -691,6 +785,7 @@ function integrate()
 function SimulationLoop()
 {
 	Contacts = []
+		context.clearRect(0,0,600,600);
 
 	// Compute collisions
 	//
@@ -701,7 +796,7 @@ function SimulationLoop()
 			//  if both objects are static don't check collisions
 			if (States[i].M==0 && States[j].M==0)
 				continue
-			ComputeBoxBoxContacts(States[i],States[j])
+			ComputeContacts(States[i],States[j])
 		}
 	}
 
@@ -743,12 +838,12 @@ function SimulationLoop()
 
 	// compute tentative velocities
 	//
+
 	integrate();
 
 	// render objects and collisions
 	//
 	{
-		context.clearRect(0,0,600,600);
 
 		if (pickedObject>=0)
 		{
@@ -759,7 +854,10 @@ function SimulationLoop()
 
 		for(var i=0;i<States.length;i++)
 		{
-			drawPoly(States[i], "#000000");
+            if (States[i].b.length>1)
+                drawPoly(States[i], "#000000");
+            else 
+                drawDisc(States[i], "#000000");
 			drawCross(States[i].p, .1, "#000080")
 		}
 
@@ -808,6 +906,15 @@ function init()
 		b2 = States[i+1]
 		Links.push( new Link(b1, b1.b[3], b2, b2.b[0]));
 	}
+
+	// Ball
+	//
+	var c = [ new Vector(0, 0) ];
+	CreateState(10,10, DegToRad(0),c,1,0);
+
+	var c = [ new Vector(0, 0) ];
+	CreateState(10,7, DegToRad(0),c,1,0);
+
 
 	// ground
 	//

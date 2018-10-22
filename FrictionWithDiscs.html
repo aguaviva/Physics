@@ -748,6 +748,10 @@ function ComputeContacts(s1,s2)
     {
         ComputeDiscBoxContacts(s1,s2)
     }
+    else if (s2.rb.length==1 && s1.rb.length>1)
+    {
+        ComputeDiscBoxContacts(s2,s1)
+    }
     else if (s1.rb.length==1 && s2.rb.length==1)
     {
         ComputeDiscDiscContacts(s1,s2);
@@ -909,12 +913,11 @@ function init()
 
 	// Ball
 	//
-	var c = [ new Vector(0, 0) ];
-	CreateState(10,10, DegToRad(0),c,1,0);
-
-	var c = [ new Vector(0, 0) ];
-	CreateState(10,7, DegToRad(0),c,1,0);
-
+    for(var i=0;i<2;i++)
+    {
+        var c = [ new Vector(0, 0) ];
+        CreateState(10,10-i*2.1, DegToRad(0),c,1,0);
+    }
 
 	// ground
 	//

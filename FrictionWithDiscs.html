@@ -701,9 +701,9 @@ function ComputeDiscBoxContacts(d,s)
     for (var j = 0; j < s.rb.length; j++)
     {
         var jj = j+1; if (jj >= s.rb.length) jj = 0;
-        var pt = ClosesPointToSegment(d.rb[0], s.rb[j], s.rb[jj]);
+        var pt = ClosesPointToSegment(d.p, s.rb[j], s.rb[jj]);
         
-        var dist = lengthV(subV(pt, d.rb[0]))
+        var dist = lengthV(subV(pt, d.p))
         
         if (dist<minDist)
         {
@@ -714,9 +714,9 @@ function ComputeDiscBoxContacts(d,s)
     
     if (minPt!=null && minDist<1)
     {
-        var normal = subV(d.rb[0], minPt);            
+        var normal = subV(d.p, minPt);            
         normal = mulV(normal,1/lengthV(normal));             
-        var p = addV(d.rb[0], mulV(normal, -1))
+        var p = addV(d.p, mulV(normal, -1))
         Contacts.push(new Contact(d,s, p, normal, minPt));
     }        
 }
@@ -728,8 +728,8 @@ function ComputeDiscDiscContacts(d1,d2)
     if (dist<2)
     {
         var normal = mulV(n, 1/dist)
-        var p1 = addV(d1.rb[0], mulV(normal, -1))
-        var p2 = addV(d2.rb[0], mulV(normal, 1))
+        var p1 = addV(d1.p, mulV(normal, -1))
+        var p2 = addV(d2.p, mulV(normal, 1))
         Contacts.push(new Contact(d1,d2, p1, normal, p2));
     }
 }

@@ -36,6 +36,7 @@ function ortoV(a)     { return new Vector( -a.y, a.x); }
 function crossKV(k,v) { return new Vector(-v.y*k, v.x *k); }
 function crossVV(a,b) { return a.x*b.y-a.y*b.x; }
 function lengthV(a)   { return Math.sqrt(dotV(a,a)); }
+function normV(a)   { return mulV(a, 1.0/lengthV(a)); }
 
 // Frame of reference
 function Frame(x, y, r) { this.x = x; this.y = y; this.r = r; }
@@ -62,15 +63,15 @@ function getPosS(f, p)        { return TransFV( f.p, p ); }
 
 function Link(b1, p1, b2, p2)
 {
-	this.b1 = b1;	this.p1 = p1;
-	this.b2 = b2;	this.p2 = p2;
+    this.b1 = b1;    this.p1 = p1;
+    this.b2 = b2;    this.p2 = p2;
 }
 
 function Contact(b1, b2, p1, n1, p2)
 {
-	this.b1 = b1;	this.p1 = p1;
-	this.b2 = b2;	this.p2 = p2;
-	this.n1 = n1;
+    this.b1 = b1;    this.p1 = p1;
+    this.b2 = b2;    this.p2 = p2;
+    this.n1 = n1;
 }
 
 var Contacts = []
@@ -90,9 +91,9 @@ var pickedObject = -1;
 
 function CreateState(px, py, rot, geom, invMass, invI)
 {
-	var p = new Frame(px,py, rot);
-	var v = new Frame( 0, 0, 0);
-	States.push( new State(p, v, geom, invMass, invI ));
+    var p = new Frame(px,py, rot);
+    var v = new Frame( 0, 0, 0);
+    States.push( new State(p, v, geom, invMass, invI ));
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -107,63 +108,63 @@ function circle(p) { context.arc(p.x*30,p.y*30, 30, 0, 2*Math.PI, false);  }
 
 function drawLine( p1,p2, color)
 {
-	context.beginPath();
-	context.strokeStyle=(color==null)?"#000000":color;
-	moveTo(p1)
-	lineTo(p2)
-	context.stroke();
+    context.beginPath();
+    context.strokeStyle=(color==null)?"#000000":color;
+    moveTo(p1)
+    lineTo(p2)
+    context.stroke();
 }
 
 function drawCross(p, radius, color)
 {
-	drawLine( addV(p, new Vector(-1/5,0)), addV(p, new Vector(1/5,0)));
-	drawLine( addV(p, new Vector(0,-1/5)), addV(p, new Vector(0,1/5)));
+    drawLine( addV(p, new Vector(-1/5,0)), addV(p, new Vector(1/5,0)));
+    drawLine( addV(p, new Vector(0,-1/5)), addV(p, new Vector(0,1/5)));
 }
 
 function drawPoly(state, color)
 {
-	context.beginPath();
-	context.strokeStyle=(color==null)?"#000000":color;
-	moveTo(state.rb[0])
-	for(var i=1;i<state.b.length;i++)
-		lineTo(state.rb[i])
-	context.closePath();
+    context.beginPath();
+    context.strokeStyle=(color==null)?"#000000":color;
+    moveTo(state.rb[0])
+    for(var i=1;i<state.b.length;i++)
+        lineTo(state.rb[i])
+    context.closePath();
     
-	context.stroke();
+    context.stroke();
 }
 
 function drawDisc(state, color)
 {
-	context.beginPath();
-	context.strokeStyle=(color==null)?"#000000":color;
+    context.beginPath();
+    context.strokeStyle=(color==null)?"#000000":color;
     circle(state.rb[0]); 
     moveTo(state.p)
     lineTo(addV(state.p, new Vector(Math.cos(state.p.r),Math.sin(state.p.r))))
 
     
-	context.closePath();
-	context.stroke();
+    context.closePath();
+    context.stroke();
 }
 
 function drawNormal( p1,p2, col, r)
 {
-	n = subV(p2,p1);
-	l = lengthV(n);
-	n = mulV(n,1/l)
+    n = subV(p2,p1);
+    l = lengthV(n);
+    n = mulV(n,1/l)
 
-	if (r!=undefined)
-	{
-		l=r
-		p2 = addV(p1,mulV(n, r))
-	}
+    if (r!=undefined)
+    {
+        l=r
+        p2 = addV(p1,mulV(n, r))
+    }
 
-	drawLine( p1,p2, col);
+    drawLine( p1,p2, col);
 
-	nn = mulV(n,l*.8);
-	nf = mulV(n,l*.08);
+    nn = mulV(n,l*.8);
+    nf = mulV(n,l*.08);
 
-	drawLine( addV(p1, addV(nn, ortoV(nf))) ,p2, col)
-	drawLine( addV(p1, addV(nn, mulV(ortoV(nf),-1))) ,p2, col)
+    drawLine( addV(p1, addV(nn, ortoV(nf))) ,p2, col)
+    drawLine( addV(p1, addV(nn, mulV(ortoV(nf),-1))) ,p2, col)
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -177,22 +178,22 @@ function drawNormal( p1,p2, col, r)
 //
 function MulMatFF(m1, m2)
 {
-	var O = [];
+    var O = [];
 
-	for(var j=0;j<m1.length;j++)
-	{
-		O[j]=[];
-		for(var i=0;i<m2[0].length;i++)
-		{
-			var tmp=0;
-			for(var k=0;k<m1[i].length;k++)
-			{
-				tmp += dotF(m1[j][k], m2[k][i]);
-			}
-			O[j][i] = tmp;
-		}
-	}
-	return O;
+    for(var j=0;j<m1.length;j++)
+    {
+        O[j]=[];
+        for(var i=0;i<m2[0].length;i++)
+        {
+            var tmp=0;
+            for(var k=0;k<m1[i].length;k++)
+            {
+                tmp += dotF(m1[j][k], m2[k][i]);
+            }
+            O[j][i] = tmp;
+        }
+    }
+    return O;
 }
 
 //
@@ -200,16 +201,16 @@ function MulMatFF(m1, m2)
 //
 function MulMatSF(s, f)
 {
-	var O = [];
-	for(var j=0;j<f.length;j++)
-	{
-		O[j]=[];
-		for(var i=0;i<f[0].length;i++)
-		{
-			O[j][i] = new FrameV( mulV(f[j][i], s[j].M), f[j][i].r*s[j].I);
-		}
-	}
-	return O;
+    var O = [];
+    for(var j=0;j<f.length;j++)
+    {
+        O[j]=[];
+        for(var i=0;i<f[0].length;i++)
+        {
+            O[j][i] = new FrameV( mulV(f[j][i], s[j].M), f[j][i].r*s[j].I);
+        }
+    }
+    return O;
 }
 
 //
@@ -217,21 +218,21 @@ function MulMatSF(s, f)
 //
 function MulMatKK(m1, m2)
 {
-	var O = [];
-	for(var j=0;j<m1.length;j++)
-	{
-		O[j]=[];
-		for(var i=0;i<m2[0].length;i++)
-		{
-			var tmp=0;
-			for(var k=0;k<m1[i].length;k++)
-			{
-				tmp += (m1[j][k] * m2[k][i]);
-			}
-			O[j][i] = tmp;
-		}
-	}
-	return O;
+    var O = [];
+    for(var j=0;j<m1.length;j++)
+    {
+        O[j]=[];
+        for(var i=0;i<m2[0].length;i++)
+        {
+            var tmp=0;
+            for(var k=0;k<m1[i].length;k++)
+            {
+                tmp += (m1[j][k] * m2[k][i]);
+            }
+            O[j][i] = tmp;
+        }
+    }
+    return O;
 }
 
 //
@@ -239,21 +240,21 @@ function MulMatKK(m1, m2)
 //
 function MulMatFK(m1, m2)
 {
-	var O = [];
-	for(var j=0;j<m1.length;j++)
-	{
-		O[j]=[];
-		for(var i=0;i<m2[0].length;i++)
-		{
-			var tmp = new Frame(0,0,0);
-			for(var k=0;k<m1[i].length;k++)
-			{
-				tmp = addF(mulFK(m1[j][k], m2[k][i]), tmp);
-			}
-			O[j][i] = tmp;
-		}
-	}
-	return O;
+    var O = [];
+    for(var j=0;j<m1.length;j++)
+    {
+        O[j]=[];
+        for(var i=0;i<m2[0].length;i++)
+        {
+            var tmp = new Frame(0,0,0);
+            for(var k=0;k<m1[i].length;k++)
+            {
+                tmp = addF(mulFK(m1[j][k], m2[k][i]), tmp);
+            }
+            O[j][i] = tmp;
+        }
+    }
+    return O;
 }
 
 //
@@ -261,16 +262,16 @@ function MulMatFK(m1, m2)
 //
 function addVMatKK(m1, m2)
 {
-	var O = [];
-	for(var j=0;j<m1.length;j++)
-	{
-		O[j]=[];
-		for(var i=0;i<m1[0].length;i++)
-		{
-			O[j][i] = m1[j][i] + m2[j][i];
-		}
-	}
-	return O;
+    var O = [];
+    for(var j=0;j<m1.length;j++)
+    {
+        O[j]=[];
+        for(var i=0;i<m1[0].length;i++)
+        {
+            O[j][i] = m1[j][i] + m2[j][i];
+        }
+    }
+    return O;
 }
 
 //
@@ -278,16 +279,16 @@ function addVMatKK(m1, m2)
 //
 function TransposeMat(m)
 {
-	var O = [];
-	for(var j=0;j<m[0].length;j++)
-	{
-		O[j]=[];
-		for(var i=0;i<m.length;i++)
-		{
-			O[j][i] = m[i][j];
-		}
-	}
-	return O;
+    var O = [];
+    for(var j=0;j<m[0].length;j++)
+    {
+        O[j]=[];
+        for(var i=0;i<m.length;i++)
+        {
+            O[j][i] = m[i][j];
+        }
+    }
+    return O;
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -300,7 +301,7 @@ function TransposeMat(m)
 // Inverts a matrix (taken from http://blog.acipo.com/matrix-inversion-in-javascript/)
 //
 function invertMat(M){
-	// I use Guassian Elimination to calculate the inverse:
+    // I use Guassian Elimination to calculate the inverse:
   // (1) 'augment' the matrix (left) by the identity (on the right)
   // (2) Turn the matrix on the left into the identity by elemetry row ops
   // (3) The matrix on the right is the inverse (was the identity matrix)
@@ -355,7 +356,7 @@ function invertMat(M){
         }
       }
 
-	    //get the new diagonal
+        //get the new diagonal
       e = C[i][i];
       //if it's still 0, not invertable (error)
       if(e==0){return}
@@ -367,7 +368,7 @@ function invertMat(M){
       I[i][j] = I[i][j]/e; //apply to identity
     }
 
-  	// subVtract this row (scaled appropriately for each row) from ALL of
+      // subVtract this row (scaled appropriately for each row) from ALL of
     // the other rows so that there will be 0's in this column in the
     // rows above and below this one
     for(ii=0; ii<dim; ii++){
@@ -395,26 +396,26 @@ function invertMat(M){
 
 function GetLambda(J, invM, velT, bias)
 {
-	var J_velT = MulMatFF(J, velT);
+    var J_velT = MulMatFF(J, velT);
 
-	if (bias!=undefined)
-		J_velT = addVMatKK(J_velT, bias);
+    if (bias!=undefined)
+        J_velT = addVMatKK(J_velT, bias);
 
-	var Jt = TransposeMat(J);
-	var invM_Jt =  MulMatSF(invM, Jt);
-	var J_invM_Jt = MulMatFF(J, invM_Jt );
-	var invJJt = invertMat( J_invM_Jt );
-	var lambda = MulMatKK( invJJt, J_velT);
-	
-	return [[-lambda[0][0]]];
+    var Jt = TransposeMat(J);
+    var invM_Jt =  MulMatSF(invM, Jt);
+    var J_invM_Jt = MulMatFF(J, invM_Jt );
+    var invJJt = invertMat( J_invM_Jt );
+    var lambda = MulMatKK( invJJt, J_velT);
+    
+    return [[-lambda[0][0]]];
 }
 
 function GetMinvJtlambda(invM, J, lambda)
 {
-	var Jt = TransposeMat(J);
-	var Jt_lambda = MulMatFK( Jt, lambda);
-	var invM_Jt_lambda = MulMatSF(invM, Jt_lambda);
-	return invM_Jt_lambda;	
+    var Jt = TransposeMat(J);
+    var Jt_lambda = MulMatFK( Jt, lambda);
+    var invM_Jt_lambda = MulMatSF(invM, Jt_lambda);
+    return invM_Jt_lambda;    
 }
 
 
@@ -423,51 +424,51 @@ function GetMinvJtlambda(invM, J, lambda)
 //
 function DistanceConstraint(link)
 {
-	var Pa = getPosS( link.b1, link.p1);
-	var Pb = getPosS( link.b2, link.p2);
+    var Pa = getPosS( link.b1, link.p1);
+    var Pb = getPosS( link.b2, link.p2);
 
-	var PaPb = subV(Pb, Pa);
-	var PbPa = subV(Pa, Pb);
+    var PaPb = subV(Pb, Pa);
+    var PbPa = subV(Pa, Pb);
 
-	// compute bias---------------
-	var betaoverh = .5/intergrationStep;
-	var C = dotV(PaPb, PaPb);
+    // compute bias---------------
+    var betaoverh = .5/intergrationStep;
+    var C = dotV(PaPb, PaPb);
 
-	// if the constraint is zero (is met) then bail out, the jacobian is zero and
-	// obviously it wont have an inverse
-	if (C<= 1e-15)
-		return;
+    // if the constraint is zero (is met) then bail out, the jacobian is zero and
+    // obviously it wont have an inverse
+    if (C<= 1e-15)
+        return;
 
-	var bias = [[betaoverh * C]];
+    var bias = [[betaoverh * C]];
 
-	// compute jacobian---------
-	var J = []
+    // compute jacobian---------
+    var J = []
 
-	var Ca = link.b1.p;
-	var Cb = link.b2.p;
+    var Ca = link.b1.p;
+    var Cb = link.b2.p;
 
-	var CaPa = subV(Pa, Ca);
-	var CbPb = subV(Pb, Cb);
+    var CaPa = subV(Pa, Ca);
+    var CbPb = subV(Pb, Cb);
 
-	var Wa   = -crossVV(CaPa, PaPb);
-	var Wb   =  crossVV(CbPb, PaPb);
+    var Wa   = -crossVV(CaPa, PaPb);
+    var Wb   =  crossVV(CbPb, PaPb);
 
-	J[0] = [ new FrameV(mulV(mulV(PaPb,-1),2), 2*Wa), new FrameV(mulV(PaPb,2), 2*Wb) ];
+    J[0] = [ new FrameV(mulV(mulV(PaPb,-1),2), 2*Wa), new FrameV(mulV(PaPb,2), 2*Wb) ];
 
-	// compute vels--------------
-	var vel = [[ link.b1.v, link.b2.v ]];
-	var velT = TransposeMat(vel);
+    // compute vels--------------
+    var vel = [[ link.b1.v, link.b2.v ]];
+    var velT = TransposeMat(vel);
 
-	//just the diagonal matrix -----
-	var invM = [ link.b1, link.b2 ];
+    //just the diagonal matrix -----
+    var invM = [ link.b1, link.b2 ];
 
-	// solver-----------------------
-	var lambda = GetLambda(J, invM, velT, bias);
-	var invMJtlambda = GetMinvJtlambda(invM, J, lambda);	
+    // solver-----------------------
+    var lambda = GetLambda(J, invM, velT, bias);
+    var invMJtlambda = GetMinvJtlambda(invM, J, lambda);    
 
-	// update speeds-----------------
-	link.b1.v = addF(link.b1.v, invMJtlambda[0][0]);
-	link.b2.v = addF(link.b2.v, invMJtlambda[1][0]);
+    // update speeds-----------------
+    link.b1.v = addF(link.b1.v, invMJtlambda[0][0]);
+    link.b2.v = addF(link.b2.v, invMJtlambda[1][0]);
 }
 
 //
@@ -475,32 +476,32 @@ function DistanceConstraint(link)
 //
 function InequalityConstraints(pair)
 {
-	normal = mulV(pair.n1, 1/lengthV(pair.n1));
+    normal = mulV(pair.n1, 1/lengthV(pair.n1));
 
-	// compute bias---------------
-	var betaoverh = (.5/intergrationStep);
-	var C = dotV(subV(pair.p1, pair.p2), normal );
-	var Cdot = dotV( subV(getVelS(pair.b1, pair.p1), getVelS(pair.b2, pair.p2)), normal);
-	var bias = [[betaoverh * C + Cdot*CoefficientOfRestitution]];
+    // compute bias---------------
+    var betaoverh = (.5/intergrationStep);
+    var C = dotV(subV(pair.p1, pair.p2), normal );
+    var Cdot = dotV( subV(getVelS(pair.b1, pair.p1), getVelS(pair.b2, pair.p2)), normal);
+    var bias = [[betaoverh * C + Cdot*CoefficientOfRestitution]];
 
-	// compute jacobian---------
-	var J = []
+    // compute jacobian---------
+    var J = []
 
-	var CaPa = subV(pair.p1, pair.b1.p);
-	var CbPb = subV(pair.p2, pair.b2.p);
+    var CaPa = subV(pair.p1, pair.b1.p);
+    var CbPb = subV(pair.p2, pair.b2.p);
 
-	J[0] = [ new Frame( normal.x,  normal.y,   crossVV(CaPa, normal)),
-			 new Frame(-normal.x, -normal.y,  -crossVV(CbPb, normal))];
+    J[0] = [ new Frame( normal.x,  normal.y,   crossVV(CaPa, normal)),
+             new Frame(-normal.x, -normal.y,  -crossVV(CbPb, normal))];
 
-	// compute vels--------------
-	var vel = [[ pair.b1.v, pair.b2.v ]];
-	var velT = TransposeMat(vel);
+    // compute vels--------------
+    var vel = [[ pair.b1.v, pair.b2.v ]];
+    var velT = TransposeMat(vel);
 
-	//just the diagonal matrix -----
-	var invM = [ pair.b1, pair.b2 ];
+    //just the diagonal matrix -----
+    var invM = [ pair.b1, pair.b2 ];
 
-	// solver-----------------------
-	var lambda = GetLambda(J, invM, velT, bias);
+    // solver-----------------------
+    var lambda = GetLambda(J, invM, velT, bias);
 
     if (pair.lambdaAcc != undefined)
     {
@@ -510,21 +511,22 @@ function InequalityConstraints(pair)
         
         lambda = [[lambdaPositive[0][0] - pair.lambdaAcc[0][0] ]];
         
-        pair.lambdaAcc = lambdaPositive;		
+
+        pair.lambda = lambda;
+        pair.lambdaAcc = lambdaPositive;        
     }
     else
     {
-        pair.lambdaAcc = lambda;
     }
 
-	var invMJtlambda = GetMinvJtlambda(invM, J, lambda);	
+    var invMJtlambda = GetMinvJtlambda(invM, J, lambda);    
 
-	// update speeds-----------------
-	pair.b1.v = addF(pair.b1.v, invMJtlambda[0][0]);
-	pair.b2.v = addF(pair.b2.v, invMJtlambda[1][0]);
-		
-	//return lambda for friction
-	return [invMJtlambda[0][0], invMJtlambda[1][0]];
+    // update speeds-----------------
+    pair.b1.v = addF(pair.b1.v, invMJtlambda[0][0]);
+    pair.b2.v = addF(pair.b2.v, invMJtlambda[1][0]);
+        
+    //return lambda for friction
+    return [invMJtlambda[0][0], invMJtlambda[1][0]];
 }
 
 //
@@ -532,25 +534,25 @@ function InequalityConstraints(pair)
 //
 function FrictionConstraints(pair, lambdaNormal)
 {
-	normal = mulV(pair.n1, 1/lengthV(pair.n1));
+    normal = mulV(pair.n1, 1/lengthV(pair.n1));
     var tangent = mulV(ortoV(normal),1);
 
     // compute bias---------------
-    var betaoverh = (.1/intergrationStep);	
-	var tangent = mulV(ortoV(pair.n1),1);
-    var C = dotV(subV(pair.p1, pair.p2), tangent );	
-	var vrel = subV(getVelS(pair.b1, pair.p1), getVelS(pair.b2, pair.p2))
+    var betaoverh = (.1/intergrationStep);    
+    var tangent = mulV(ortoV(pair.n1),1);
+    var C = dotV(subV(pair.p1, pair.p2), tangent );    
+    var vrel = subV(getVelS(pair.b1, pair.p1), getVelS(pair.b2, pair.p2))
     var Cdot = dotV( vrel, tangent);
     var bias = [[betaoverh * C + Cdot*RestitutionCoefficient]];
 
-	// compute jacobian---------
-	var J = []
+    // compute jacobian---------
+    var J = []
     
     var CaPa = subV(pair.p1, pair.b1.p);
     var CbPb = subV(pair.p2, pair.b2.p);
 
-	J[0] = [ new Frame( tangent.x,  tangent.y,   crossVV(CaPa, tangent)), 
-	         new Frame(-tangent.x, -tangent.y,  -crossVV(CbPb, tangent))];
+    J[0] = [ new Frame( tangent.x,  tangent.y,   crossVV(CaPa, tangent)), 
+             new Frame(-tangent.x, -tangent.y,  -crossVV(CbPb, tangent))];
 
     // compute vels--------------
     var vel = [[ pair.b1.v, pair.b2.v ]];
@@ -558,17 +560,73 @@ function FrictionConstraints(pair, lambdaNormal)
 
     //just the diagonal matrix -----
     var invM = [ pair.b1, pair.b2 ];
-	
+    
     // solver-----------------------
-	var lambda = GetLambda(J, invM, velT, bias);
-	
-	lambda = [[ clamp(lambda[0][0], lambda[0][0] * frictionCoefficient*.25) ]]
-	
-	var invMJtlambda = GetMinvJtlambda(invM, J, lambda);	   
+    var lambda = GetLambda(J, invM, velT, bias);
+    
+    lambda = [[ clamp(lambda[0][0], pair.lambda[0][0] * frictionCoefficient) ]]
+    
+    var invMJtlambda = GetMinvJtlambda(invM, J, lambda);       
     
     // update speeds-----------------
     pair.b1.v = addF(pair.b1.v, invMJtlambda[0][0]);
     pair.b2.v = addF(pair.b2.v, invMJtlambda[1][0]);   
+}
+
+
+function WheelConstraints(body, pos, axis)
+{
+    // compute bias---------------
+    var bias = [[ 0 ]];
+
+    // compute jacobian---------
+    var J = []
+    
+    J[0] = [ new Frame( axis.x,  axis.y,  crossVV(pos, axis) )];
+
+    // compute vels--------------
+    var vel = [[ body.v ]];
+    var velT = TransposeMat(vel);
+
+    //just the diagonal matrix -----
+    var invM = [ body ];
+    
+    // solver-----------------------
+    var lambda = GetLambda(J, invM, velT, bias);
+    
+    lambda = [[ clamp(lambda[0][0], lambda[0][0] * frictionCoefficient*0.1) ]]
+    
+    var invMJtlambda = GetMinvJtlambda(invM, J, lambda);       
+    
+    // update speeds-----------------
+    body.v = addF(body.v, invMJtlambda[0][0]);
+}
+
+function vehicleForce(body, wheelAngle, accelCar)
+{
+    //var p = RotV(body.p.r + wheelAngle, new Vector(accelCar,0))
+
+    var p1 = RotV(body.p.r, new Vector(-1,0))
+    var f = RotV(body.p.r, RotV(0*wheelAngle, new Vector(accelCar,0)))
+    
+    ApplyForceF(body, addV(body.p, p1), f);
+    drawNormal( addV(body.p,p1), addV(body.p,addV(p1,f)), "#ff0000",2);
+    //drawNormal( body.p, addV(body.p,p), "#ff0000",2);
+}
+
+function vehicleConstraint(body, wheelAngle)
+{
+    // rear wheel
+    var p1 = RotV(body.p.r, new Vector(-1,0))
+    var p2 = RotV(body.p.r, RotV(0, new Vector(0,1)))
+    WheelConstraints(body, p1, p2)
+    drawNormal( addV(body.p,p1), addV(body.p,addV(ortoV(p1),p2)), "#ff0000",2);
+
+    // front wheel
+    var p1 = RotV(body.p.r, new Vector(1,0))
+    var p2 = RotV(body.p.r, RotV(wheelAngle, new Vector(0,-1)))
+    WheelConstraints(body, p1, p2)
+    drawNormal( addV(body.p,p1), addV(body.p,addV(p1,ortoV(p2))), "#ff0000",2);
 }
 
 
@@ -583,18 +641,18 @@ function FrictionConstraints(pair, lambdaNormal)
 //
 function SegmentIntersection( a, b, c, d)
 {
-	var ab = subV(b,a);	var cd = subV(d,c);
-	var ca = subV(a,c);	var db = subV(b,d);
+    var ab = subV(b,a);    var cd = subV(d,c);
+    var ca = subV(a,c);    var db = subV(b,d);
 
-	var s = crossVV(ca, ab) / crossVV(cd, ab);
-	if (s>=0 && s<=1)
-	{
-		var t = -crossVV(ca, cd) / crossVV(ab, cd);
-		if (t>=0 && t<=1)
-			return true;
-	}
+    var s = crossVV(ca, ab) / crossVV(cd, ab);
+    if (s>=0 && s<=1)
+    {
+        var t = -crossVV(ca, cd) / crossVV(ab, cd);
+        if (t>=0 && t<=1)
+            return true;
+    }
 
-	return false;
+    return false;
 }
 
 //
@@ -609,29 +667,29 @@ function PointInPoly(point, lines)
         return lengthV(subV(point,lines[0]))<=1;
     }
 
-	var outer = null;
-	var dist = 10000000;
+    var outer = null;
+    var dist = 10000000;
 
-	for (var i = 0; i < lines.length; i++)
-	{
-		var p1 = lines[i]
-		var p2 = lines[i+1==lines.length?0:i+1];
+    for (var i = 0; i < lines.length; i++)
+    {
+        var p1 = lines[i]
+        var p2 = lines[i+1==lines.length?0:i+1];
 
-		var dir = subV(p2,p1);
-		var l = lengthV(dir)
-		var dirn = mulV(dir, 1/l);
+        var dir = subV(p2,p1);
+        var l = lengthV(dir)
+        var dirn = mulV(dir, 1/l);
 
-		var n = ortoV(dirn);
+        var n = ortoV(dirn);
 
-		var p1p = subV(point, p1);
+        var p1p = subV(point, p1);
 
-		var projP = dotV(p1p, n);
+        var projP = dotV(p1p, n);
 
-		if (projP<0)
-			return false;
-	}
+        if (projP<0)
+            return false;
+    }
 
-	return true;
+    return true;
 }
 
 //
@@ -639,21 +697,21 @@ function PointInPoly(point, lines)
 //
 function ProjectPointToLine(p, a,b)
 {
-	ab = subV(b, a);
-	var abn = mulV(ab,1/lengthV(ab));
-	ap = subV(p, a);
-	pr = dotV(abn, ap)
-	pt = addV( a, mulV(abn,pr))
-	return pt;
+    ab = subV(b, a);
+    var abn = mulV(ab,1/lengthV(ab));
+    ap = subV(p, a);
+    pr = dotV(abn, ap)
+    pt = addV( a, mulV(abn,pr))
+    return pt;
 }
 
 function ClosesPointToSegment(p, a,b)
 {
-	ab = subV(b, a);
+    ab = subV(b, a);
     var l = lengthV(ab)
-	var abn = mulV(ab,1/l);
-	ap = subV(p, a);
-	pr = dotV(abn, ap)
+    var abn = mulV(ab,1/l);
+    ap = subV(p, a);
+    pr = dotV(abn, ap)
  
    if (pr<0) return a;
     if (pr>l) return b;
@@ -768,15 +826,15 @@ function ComputeContacts(s1,s2)
 //
 function integrate()
 {
-	for(var i=0;i<States.length;i++)
-	{
-		States[i].p = addF(States[i].p , mulFK(States[i].v, intergrationStep));
+    for(var i=0;i<States.length;i++)
+    {
+        States[i].p = addF(States[i].p , mulFK(States[i].v, intergrationStep));
 
-		for(var j=0;j<States[i].b.length;j++)
-		{
-			States[i].rb[j] = TransFV(States[i].p, States[i].b[j]);
-		}
-	}
+        for(var j=0;j<States[i].b.length;j++)
+        {
+            States[i].rb[j] = TransFV(States[i].p, States[i].b[j]);
+        }
+    }
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -785,94 +843,134 @@ function integrate()
 //
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+var wheelAngle = 0.4
+var accelCar = 0;
 function SimulationLoop()
 {
-	Contacts = []
-		context.clearRect(0,0,600,600);
+    Contacts = []
+        context.clearRect(0,0,600,600);
 
-	// Compute collisions
-	//
-	for(var j=0;j<States.length;j++)
-	{
-		for(var i=0;i<j;i++)
-		{
-			//  if both objects are static don't check collisions
-			if (States[i].M==0 && States[j].M==0)
-				continue
-			ComputeContacts(States[i],States[j])
-		}
-	}
+    // Compute collisions
+    //
+    for(var j=0;j<States.length;j++)
+    {
+        for(var i=0;i<j;i++)
+        {
+            //  if both objects are static don't check collisions
+            if (States[i].M==0 && States[j].M==0)
+                continue
+            ComputeContacts(States[i],States[j])
+        }
+    }
 
-	// apply forces (gravity)
-	//
-	for(var i=0;i<States.length;i++)
-		States[i].v.y += (9.8* intergrationStep) * States[i].M;
+    // apply forces (gravity)
+    //
+//    for(var i=0;i<States.length;i++)
+//        States[i].v.y += (9.8* intergrationStep) * States[i].M;
 
-	// When an object is picked add a springy (k*distance) force between the mouse and the object
-	if (pickedObject>=0)
-	{
-		var state = States[pickedObject];
-		var p = TransFV(state.p, pickedPoint);
-		var distance = subV(mousePosition, p);
-		var force  = mulV(distance, 0.1);
-		ApplyForceF(state, p, force);
-	}
+    wheelAngle*=.99;
+    accelCar*=.99;
+    if (Key.isDown(Key.UP)) accelCar += .001;
+    if (Key.isDown(Key.DOWN)) accelCar -= .001;
+    if (Key.isDown(Key.RIGHT)) wheelAngle += .01;
+    if (Key.isDown(Key.LEFT)) wheelAngle -= .01;
+    accelCar = clamp(accelCar, .02)
 
-	for(var i=0;i<Contacts.length;i++)
-	{
-		Contacts[i].lambdaAcc = [[0]];
-	}
+    // When an object is picked add a springy (k*distance) force between the mouse and the object
+    if (pickedObject>=0)
+    {
+        var state = States[pickedObject];
+        var p = TransFV(state.p, pickedPoint);
+        var distance = subV(mousePosition, p);
+        var force  = mulV(distance, 0.1);
+        ApplyForceF(state, p, force);
+    }
 
-	// apply constraints
-	var iterations = 4;
-	for(var iter=0;iter<iterations;iter++)
-	{
-		for(var i=0;i<Links.length;i++)
-		{
-			DistanceConstraint(Links[i])
-		}
+    vehicleForce(States[0], wheelAngle, accelCar);
 
-		for(var i=0;i<Contacts.length;i++)
-		{
-			var lambdaNormal = InequalityConstraints(Contacts[i])
-			FrictionConstraints(Contacts[i], lambdaNormal);
-		}
-	}
+    for(var i=0;i<Contacts.length;i++)
+    {
+        Contacts[i].lambdaAcc = [[0]];
+    }
 
-	// compute tentative velocities
-	//
+    // apply constraints
+    var iterations = 4;
+    for(var iter=0;iter<iterations;iter++)
+    {
+        for(var i=0;i<Links.length;i++)
+        {
+            DistanceConstraint(Links[i])
+        }
 
-	integrate();
+        for(var i=0;i<Contacts.length;i++)
+        {
+            var lambdaNormal = InequalityConstraints(Contacts[i])
+            FrictionConstraints(Contacts[i], lambdaNormal);
+        }
+        
+        vehicleConstraint(States[0], wheelAngle);
+    }
 
-	// render objects and collisions
-	//
-	{
+    // compute tentative velocities
+    //
 
-		if (pickedObject>=0)
-		{
-			var state = States[pickedObject];
-			var p = TransFV(state.p, pickedPoint);
-			drawLine(p, mousePosition, "#000080")
-		}
+    integrate();
 
-		for(var i=0;i<States.length;i++)
-		{
+    // render objects and collisions
+    //
+    {
+
+        if (pickedObject>=0)
+        {
+            var state = States[pickedObject];
+            var p = TransFV(state.p, pickedPoint);
+            drawLine(p, mousePosition, "#000080")
+        }
+
+        for(var i=0;i<States.length;i++)
+        {
             if (States[i].b.length>1)
                 drawPoly(States[i], "#000000");
             else 
                 drawDisc(States[i], "#000000");
-			drawCross(States[i].p, .1, "#000080")
-		}
+            drawCross(States[i].p, .1, "#000080")
+        }
 
-		if (showNormals)
-		{
-			for(var i=0;i<Contacts.length;i++)
-			{
-				drawNormal( Contacts[i].p1, Contacts[i].p2, "#ff0000",2);
-			}
-		}
-	}
+        if (showNormals)
+        {
+            for(var i=0;i<Contacts.length;i++)
+            {
+                drawNormal( Contacts[i].p1, Contacts[i].p2, "#ff0000",2);
+            }
+        }
+    }
 }
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//
+//                                               key handler
+//
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+var Key = {
+  _pressed: {},
+
+  LEFT: 37,
+  UP: 38,
+  RIGHT: 39,
+  DOWN: 40,
+  
+  isDown: function(keyCode) {
+    return this._pressed[keyCode];
+  },
+  
+  onKeydown: function(event) {
+    this._pressed[event.keyCode] = true;
+  },
+  
+  onKeyup: function(event) {
+    delete this._pressed[event.keyCode];
+  }
+};
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -882,68 +980,72 @@ function SimulationLoop()
 
 function init()
 {
-    var dpr = window.devicePixelRatio || 1;
-    // Get the size of the canvas in CSS pixels.
-    var rect = myCanvas.getBoundingClientRect();
-    // Give the canvas pixel dimensions of their CSS
-    // size * the device pixel ratio.
-    myCanvas.width = rect.width * dpr;
-    myCanvas.height = rect.height * dpr;
-	context = myCanvas.getContext('2d');
-    context.scale(dpr, dpr);
-    
-	States = []
-	Links = []
+    context = myCanvas.getContext('2d');
 
-	//
-	// Create scene
-	//
+    States = []
+    Links = []
 
-	// create top hook
-	//
-	var hookVerts = [ new Vector(-1,-1), new Vector(1,-1), new Vector(1,1), new Vector(0, 1), new Vector(-1,1) ];
-	CreateState(10,0,0,hookVerts,0,0);
+    window.addEventListener('keyup', function(event) { Key.onKeyup(event); }, false);
+    window.addEventListener('keydown', function(event) { Key.onKeydown(event); }, false);
 
-	// create chain
-	//
-	var linkVerts = [ new Vector(0, -0.5), new Vector(0.1, -0.3), new Vector(0.1, 0.3), new Vector(0, 0.5), new Vector(-0.1, 0.3), new Vector(-0.1, -0.3) ];
+    //
+    // Create scene
+    //
 
-	for(var i=0;i<13;i++)
-	{
-		var l = Math.sqrt(.5)
-		CreateState(10+i*l + l*.5,1+i*l + l*.5, DegToRad(-45),linkVerts,1,1);
+    var r = 1;
+    var boxVerts = [ new Vector(-r, -r/2), new Vector(r, -r/2), new Vector(r, r/2), new Vector(-r, r/2)];
+    CreateState(7 ,10-2.8*r, DegToRad(0),boxVerts,1,1);
 
-		b1 = States[i];
-		b2 = States[i+1]
-		Links.push( new Link(b1, b1.b[3], b2, b2.b[0]));
-	}
 
-	// Ball
-	//
+    // create top hook
+    //
+//    var hookVerts = [ new Vector(-1,-1), new Vector(1,-1), new Vector(1,1), new Vector(0, 1), new Vector(-1,1) ];
+//    CreateState(10,0,0,hookVerts,0,0);
+/*
+    // create chain
+    //
+    var linkVerts = [ new Vector(0, -0.5), new Vector(0.1, -0.3), new Vector(0.1, 0.3), new Vector(0, 0.5), new Vector(-0.1, 0.3), new Vector(-0.1, -0.3) ];
+
+    for(var i=0;i<13;i++)
+    {
+        var l = Math.sqrt(.5)
+        CreateState(10+i*l + l*.5,1+i*l + l*.5, DegToRad(-45),linkVerts,1,1);
+
+        b1 = States[i];
+        b2 = States[i+1]
+        Links.push( new Link(b1, b1.b[3], b2, b2.b[0]));
+    }
+
+    // Ball
+    //
     for(var i=0;i<2;i++)
     {
         var c = [ new Vector(0, 0) ];
         CreateState(10,10-i*2.1, DegToRad(0),c,1,0);
     }
+*/
 
-	// ground
-	//
-	var groundVerts = [ new Vector(-10, -1), new Vector(10, -1), new Vector(10, 1), new Vector(-10, 1)];
-	CreateState(10,19, DegToRad(0),groundVerts,0,0);
+    // ground
+    //
+    var groundVerts = [ new Vector(-10, -1), new Vector(10, -1), new Vector(10, 1), new Vector(-10, 1)];
+    CreateState(10,20, DegToRad(0),groundVerts,0,0);
+    CreateState(10,0, DegToRad(0),groundVerts,0,0);
 
-	// left/right wall
-	//
-	var wallVerts = [ new Vector(-6, -1), new Vector(6, -1), new Vector(6, 1), new Vector(-6, 1)];
-	CreateState( 0,12, DegToRad(90),wallVerts,0,0);
-	CreateState(20,12, DegToRad(90),wallVerts,0,0);
+    // left/right wall
+    //
+    var wallVerts = [ new Vector(-9, -1), new Vector(9, -1), new Vector(9, 1), new Vector(-9, 1)];
+    CreateState( 0,10, DegToRad(90),wallVerts,0,0);
+    CreateState(20,10, DegToRad(90),wallVerts,0,0);
 
-	// create stack
-	//
-	var r = 1;
-	var boxVerts = [ new Vector(-r, -r), new Vector(r, -r), new Vector(r, r), new Vector(-r, r)];
-	for(var j=0;j<17;j++)
-		CreateState(6 ,17-2.8*r*j, DegToRad(0*j*10),boxVerts,1,1);
-		
+    // create stack
+    //
+    var r = 1;
+    var boxVerts = [ new Vector(-r, -r), new Vector(r, -r), new Vector(r, r), new Vector(-r, r)];
+    for(var j=0;j<6;j++)
+        CreateState(6 ,17-2.8*r*j, DegToRad(0*j*10),boxVerts,1,1);
+
+//
+
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -954,48 +1056,41 @@ function init()
 
 function onMouseUp(event)
 {
-	pickedObject = -1;
+    pickedObject = -1;
 }
 
 function onMouseDown(event)
 {
-	for(var i=0;i<States.length;i++)
-	{
-		if (States[i].M>0 && PointInPoly(mousePosition, States[i].rb))
-		{
-			pickedObject = i;
-			pickedPoint = InvTransFV(States[i].p, mousePosition);
-			return;
-		}
-	}
-	pickedObject = -1;
+    for(var i=0;i<States.length;i++)
+    {
+        if (States[i].M>0 && PointInPoly(mousePosition, States[i].rb))
+        {
+            pickedObject = i;
+            pickedPoint = InvTransFV(States[i].p, mousePosition);
+            return;
+        }
+    }
+    pickedObject = -1;
 }
 
 function onMouseMove(event)
 {
-	var rect = myCanvas.getBoundingClientRect();
-	mousePosition.x = (event.clientX - rect.left) / 30;
-	mousePosition.y = (event.clientY - rect.top ) / 30;
+    var rect = myCanvas.getBoundingClientRect();
+    mousePosition.x = (event.clientX - rect.left) / 30;
+    mousePosition.y = (event.clientY - rect.top ) / 30;
 }
 </script>
 </head>
 <body onload="init();setInterval(SimulationLoop,5); ">
-<h1>Rigid body simulator featuring links, friction and resting constraints</h3>
+<h1>Rigid body simulator featuring a car</h3>
 <div id="container">
-<canvas id="myCanvas" width="600" height="600" onmouseup="onMouseUp(event)" onmousedown="onMouseDown(event)" onmousemove="onMouseMove(event)"></canvas>
+<canvas id="myCanvas" width="600" height="600" onkeypress="onkeypress(event)" onmouseup="onMouseUp(event)" onmousedown="onMouseDown(event)" onmousemove="onMouseMove(event)"></canvas>
 <input type="button" value="Reset" onclick="init();" /><br>
 <input type="checkbox" id="chbx" onchange="showNormals = document.getElementById('chbx').checked; ">Show normals<br>
 <p id="demo"></p>
 <h2>Intro</h2>
-This is a quick exercise to learn how constraints work in a physics simulator.</br>
-<p>It features the following constraints:
-<ul>
-	<li>linkages</li>
-	<li>friction, using a basic model, not using static & dynamic friction(but working on it!)</li>
-	<li>resting, enforces using Antonio Signorini to conditions and handles multiple contacts</li>
-</ul>
-</p>
-This physics simulator is heavily based on Erin Catto's GDC2009 talk.</br>
+Use the keyboard to drive the car.</br>
+</br>
 <h2>Contact/Questions:</h2>
  &lt;my_github_account_username&gt;@gmail.com.
 </br>

@@ -13,8 +13,8 @@
 </script>
 <style type="text/css">
 body { background-color:#ededed; font:norm2al 12px/18px Arial, Helvetica, sans-serif; }
-h1 { display:block; width:600px; margin:20px auto; paddVing-bottom:20px; font:norm2al 24px/30px Georgia, "Times New Roman", Times, serif; color:#333; text-shadow: 1px 2px 3px #ccc; border-bottom:1px solid #cbcbcb; }
-#container { width:600px; margin:0 auto; }
+h1 { display:block; width:800px; margin:20px auto; paddVing-bottom:20px; font:norm2al 24px/30px Georgia, "Times New Roman", Times, serif; color:#333; text-shadow: 1px 2px 3px #ccc; border-bottom:1px solid #cbcbcb; }
+#container { width:800px; margin:0 auto; }
 #myCanvas { background:#fff; border:1px solid #cbcbcb; }
 </style>
 <script type="text/javascript">
@@ -80,7 +80,7 @@ var States = [];
 var intergrationStep = 1./(24*6);
 var CoefficientOfRestitution = .1;
 var RestitutionCoefficient = 1;
-var frictionCoefficient = .06;
+var frictionCoefficient = .02;
 var showNormals = null;
 
 var mousePosition = new Vector(0,0);
@@ -604,29 +604,51 @@ function WheelConstraints(body, pos, axis)
 
 function vehicleForce(body, wheelAngle, accelCar)
 {
-    //var p = RotV(body.p.r + wheelAngle, new Vector(accelCar,0))
-
-    var p1 = RotV(body.p.r, new Vector(-1,0))
-    var f = RotV(body.p.r, RotV(0*wheelAngle, new Vector(accelCar,0)))
+    var p1 = RotV(body.p.r, new Vector(-.7,0))
+    var f = RotV(body.p.r, new Vector(accelCar,0))
     
     ApplyForceF(body, addV(body.p, p1), f);
-    drawNormal( addV(body.p,p1), addV(body.p,addV(p1,f)), "#ff0000",2);
-    //drawNormal( body.p, addV(body.p,p), "#ff0000",2);
+    //drawNormal( addV(body.p,p1), addV(body.p,addV(p1,f)), "#ff0000",1);
+}
+
+function vehicleDrawWheel(pos, wheelAngle)
+{
+    var wallVerts = [ new Vector(-.2, -.1), new Vector(.2, -.1), new Vector(.2, .1), new Vector(-.2, .1)];
+
+    context.beginPath();
+    context.strokeStyle="#000000";
+    moveTo(addV(pos, RotV(wheelAngle, wallVerts[0])))
+    for(var i=1;i<4;i++)
+    {        
+        lineTo(addV(pos, RotV(wheelAngle, wallVerts[i])))
+    }
+    context.closePath();
+    context.stroke();
+}
+
+function vehicleDraw(body, wheelAngle)
+{
+    vehicleDrawWheel(TransFV(body.p,new Vector(.7,.4)), body.p.r + wheelAngle);
+    vehicleDrawWheel(TransFV(body.p,new Vector(.7,-.4)), body.p.r + wheelAngle);
+    vehicleDrawWheel(TransFV(body.p,new Vector(-.7,.4)), body.p.r );
+    vehicleDrawWheel(TransFV(body.p,new Vector(-.7,-.4)), body.p.r );
+    
+    vehicleDrawWheel(TransFV(body.p,new Vector(.25,0)), body.p.r + DegToRad(90) );
 }
 
 function vehicleConstraint(body, wheelAngle)
 {
     // rear wheel
-    var p1 = RotV(body.p.r, new Vector(-1,0))
-    var p2 = RotV(body.p.r, RotV(0, new Vector(0,1)))
+    var p1 = RotV(body.p.r, new Vector(-.7,0))
+    var p2 = RotV(body.p.r, new Vector(0,-1))
     WheelConstraints(body, p1, p2)
-    drawNormal( addV(body.p,p1), addV(body.p,addV(ortoV(p1),p2)), "#ff0000",2);
+    //drawNormal( addV(body.p,p1), addV(body.p,addV(p1,ortoV(p2))), "#ff0000",1);
 
     // front wheel
-    var p1 = RotV(body.p.r, new Vector(1,0))
+    var p1 = RotV(body.p.r, new Vector(.7,0))
     var p2 = RotV(body.p.r, RotV(wheelAngle, new Vector(0,-1)))
     WheelConstraints(body, p1, p2)
-    drawNormal( addV(body.p,p1), addV(body.p,addV(p1,ortoV(p2))), "#ff0000",2);
+    //drawNormal( addV(body.p,p1), addV(body.p,addV(p1,ortoV(p2))), "#ff0000",1);
 }
 
 
@@ -848,7 +870,7 @@ var accelCar = 0;
 function SimulationLoop()
 {
     Contacts = []
-        context.clearRect(0,0,600,600);
+        context.clearRect(0,0,800,600);
 
     // Compute collisions
     //
@@ -869,9 +891,14 @@ function SimulationLoop()
 //        States[i].v.y += (9.8* intergrationStep) * States[i].M;
 
     wheelAngle*=.99;
-    accelCar*=.99;
-    if (Key.isDown(Key.UP)) accelCar += .001;
-    if (Key.isDown(Key.DOWN)) accelCar -= .001;
+    accelCar*=.98;    
+    var currAccelCar = accelCar;
+    if (Key.isDown(Key.UP)) 
+        accelCar += .001;
+    
+    if (Key.isDown(Key.DOWN)) 
+        accelCar -= .001;
+    
     if (Key.isDown(Key.RIGHT)) wheelAngle += .01;
     if (Key.isDown(Key.LEFT)) wheelAngle -= .01;
     accelCar = clamp(accelCar, .02)
@@ -933,8 +960,10 @@ function SimulationLoop()
                 drawPoly(States[i], "#000000");
             else 
                 drawDisc(States[i], "#000000");
-            drawCross(States[i].p, .1, "#000080")
+            //drawCross(States[i].p, .1, "#000080")
         }
+
+        vehicleDraw(States[0], wheelAngle);
 
         if (showNormals)
         {
@@ -1027,15 +1056,15 @@ function init()
 
     // ground
     //
-    var groundVerts = [ new Vector(-10, -1), new Vector(10, -1), new Vector(10, 1), new Vector(-10, 1)];
-    CreateState(10,20, DegToRad(0),groundVerts,0,0);
-    CreateState(10,0, DegToRad(0),groundVerts,0,0);
+    var groundVerts = [ new Vector(-10*1.333, -1), new Vector(10*1.333, -1), new Vector(10*1.333, 1), new Vector(-10*1.333, 1)];
+    CreateState(10*1.333,20, DegToRad(0),groundVerts,0,0);
+    CreateState(10*1.333,0, DegToRad(0),groundVerts,0,0);
 
     // left/right wall
     //
     var wallVerts = [ new Vector(-9, -1), new Vector(9, -1), new Vector(9, 1), new Vector(-9, 1)];
     CreateState( 0,10, DegToRad(90),wallVerts,0,0);
-    CreateState(20,10, DegToRad(90),wallVerts,0,0);
+    CreateState(20*1.333,10, DegToRad(90),wallVerts,0,0);
 
     // create stack
     //
@@ -1084,7 +1113,7 @@ function onMouseMove(event)
 <body onload="init();setInterval(SimulationLoop,5); ">
 <h1>Rigid body simulator featuring a car</h3>
 <div id="container">
-<canvas id="myCanvas" width="600" height="600" onkeypress="onkeypress(event)" onmouseup="onMouseUp(event)" onmousedown="onMouseDown(event)" onmousemove="onMouseMove(event)"></canvas>
+<canvas id="myCanvas" width="800" height="600" onkeypress="onkeypress(event)" onmouseup="onMouseUp(event)" onmousedown="onMouseDown(event)" onmousemove="onMouseMove(event)"></canvas>
 <input type="button" value="Reset" onclick="init();" /><br>
 <input type="checkbox" id="chbx" onchange="showNormals = document.getElementById('chbx').checked; ">Show normals<br>
 <p id="demo"></p>

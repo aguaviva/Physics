@@ -80,7 +80,8 @@ var States = [];
 var intergrationStep = 1./(24*6);
 var CoefficientOfRestitution = .1;
 var RestitutionCoefficient = 1;
-var frictionCoefficient = .02;
+var frictionCoefficient = .006;
+var frictionWheelCoefficient = .006;
 var showNormals = null;
 
 var mousePosition = new Vector(0,0);
@@ -594,7 +595,7 @@ function WheelConstraints(body, pos, axis)
     // solver-----------------------
     var lambda = GetLambda(J, invM, velT, bias);
     
-    lambda = [[ clamp(lambda[0][0], lambda[0][0] * frictionCoefficient*0.1) ]]
+    lambda = [[ clamp(lambda[0][0], lambda[0][0] * frictionWheelCoefficient) ]]
     
     var invMJtlambda = GetMinvJtlambda(invM, J, lambda);       
     
@@ -1023,7 +1024,7 @@ function init()
 
     var r = 1;
     var boxVerts = [ new Vector(-r, -r/2), new Vector(r, -r/2), new Vector(r, r/2), new Vector(-r, r/2)];
-    CreateState(7 ,10-2.8*r, DegToRad(0),boxVerts,1,1);
+    CreateState(10 ,10-2.8*r, DegToRad(0),boxVerts,1,1);
 
 
     // create top hook

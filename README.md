@@ -1,6 +1,10 @@
 # Physics
 Experimenting with physics simulation
 
+<p align="center">
+  <img width="460"  src="screenshot.png">
+</p>
+
 ### Demos:
 1. [Particle chain](https://aguaviva.github.io/Physics/ChainSimulation.html), no collision detection/response
 2. [Particle contact](https://aguaviva.github.io/Physics/ContactConstraints.html), with contact constraints (coolision detection and response)

@@ -57,7 +57,8 @@ function ApplyForceF(f, point, force)
 }
 
 // velocities, positions and radius
-function State(pos, vel, body, invMass, invI) { this.p = pos; this.v = vel; this.b = body; this.rb = []; this.M=invMass; this.I = invI;  }
+function State(pos, vel) { this.p = pos; this.v = vel; }
+function Body(state, body, invMass, invI) { this.state = state; this.b = body; this.rb = []; this.M=invMass; this.I = invI;  }
 function getVelS(f, p)        { return addV( f.v, crossKV( f.v.r, subV(p,f.p) ) ); }
 function getPosS(f, p)        { return TransFV( f.p, p ); }
 
@@ -77,6 +78,7 @@ function Contact(b1, b2, p1, n1, p2)
 var Contacts = []
 var Links = [];
 var States = [];
+var Bodies = [];
 var intergrationStep = 1./(24*6);
 var CoefficientOfRestitution = .1;
 var RestitutionCoefficient = 1;
@@ -94,7 +96,17 @@ function CreateState(px, py, rot, geom, invMass, invI)
 {
     var p = new Frame(px,py, rot);
     var v = new Frame( 0, 0, 0);
-    States.push( new State(p, v, geom, invMass, invI ));
+    var state = new State(p, v)
+    var body = new Body(state, geom, invMass, invI )
+    States.push(state);
+    Bodies.push(body);
+    return body;
+}
+
+function serializeState(state)
+{
+    var out = '"px":'+state.p.x+","+'"py":'+state.p.y+","+'"pr":'+state.p.r+","+
+              '"vx":'+state.v.x+","+'"vy":'+state.v.y+","+'"vr":'+state.v.r;
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -482,20 +494,20 @@ function InequalityConstraints(pair)
     // compute bias---------------
     var betaoverh = (.5/intergrationStep);
     var C = dotV(subV(pair.p1, pair.p2), normal );
-    var Cdot = dotV( subV(getVelS(pair.b1, pair.p1), getVelS(pair.b2, pair.p2)), normal);
+    var Cdot = dotV( subV(getVelS(pair.b1.state, pair.p1), getVelS(pair.b2.state, pair.p2)), normal);
     var bias = [[betaoverh * C + Cdot*CoefficientOfRestitution]];
 
     // compute jacobian---------
     var J = []
 
-    var CaPa = subV(pair.p1, pair.b1.p);
-    var CbPb = subV(pair.p2, pair.b2.p);
+    var CaPa = subV(pair.p1, pair.b1.state.p);
+    var CbPb = subV(pair.p2, pair.b2.state.p);
 
     J[0] = [ new Frame( normal.x,  normal.y,   crossVV(CaPa, normal)),
              new Frame(-normal.x, -normal.y,  -crossVV(CbPb, normal))];
 
     // compute vels--------------
-    var vel = [[ pair.b1.v, pair.b2.v ]];
+    var vel = [[ pair.b1.state.v, pair.b2.state.v ]];
     var velT = TransposeMat(vel);
 
     //just the diagonal matrix -----
@@ -523,8 +535,8 @@ function InequalityConstraints(pair)
     var invMJtlambda = GetMinvJtlambda(invM, J, lambda);    
 
     // update speeds-----------------
-    pair.b1.v = addF(pair.b1.v, invMJtlambda[0][0]);
-    pair.b2.v = addF(pair.b2.v, invMJtlambda[1][0]);
+    pair.b1.state.v = addF(pair.b1.state.v, invMJtlambda[0][0]);
+    pair.b2.state.v = addF(pair.b2.state.v, invMJtlambda[1][0]);
         
     //return lambda for friction
     return [invMJtlambda[0][0], invMJtlambda[1][0]];
@@ -542,21 +554,21 @@ function FrictionConstraints(pair, lambdaNormal)
     var betaoverh = (.1/intergrationStep);    
     var tangent = mulV(ortoV(pair.n1),1);
     var C = dotV(subV(pair.p1, pair.p2), tangent );    
-    var vrel = subV(getVelS(pair.b1, pair.p1), getVelS(pair.b2, pair.p2))
+    var vrel = subV(getVelS(pair.b1.state, pair.p1), getVelS(pair.b2.state, pair.p2))
     var Cdot = dotV( vrel, tangent);
     var bias = [[betaoverh * C + Cdot*RestitutionCoefficient]];
 
     // compute jacobian---------
     var J = []
     
-    var CaPa = subV(pair.p1, pair.b1.p);
-    var CbPb = subV(pair.p2, pair.b2.p);
+    var CaPa = subV(pair.p1, pair.b1.state.p);
+    var CbPb = subV(pair.p2, pair.b2.state.p);
 
     J[0] = [ new Frame( tangent.x,  tangent.y,   crossVV(CaPa, tangent)), 
              new Frame(-tangent.x, -tangent.y,  -crossVV(CbPb, tangent))];
 
     // compute vels--------------
-    var vel = [[ pair.b1.v, pair.b2.v ]];
+    var vel = [[ pair.b1.state.v, pair.b2.state.v ]];
     var velT = TransposeMat(vel);
 
     //just the diagonal matrix -----
@@ -570,8 +582,8 @@ function FrictionConstraints(pair, lambdaNormal)
     var invMJtlambda = GetMinvJtlambda(invM, J, lambda);       
     
     // update speeds-----------------
-    pair.b1.v = addF(pair.b1.v, invMJtlambda[0][0]);
-    pair.b2.v = addF(pair.b2.v, invMJtlambda[1][0]);   
+    pair.b1.state.v = addF(pair.b1.state.v, invMJtlambda[0][0]);
+    pair.b2.state.v = addF(pair.b2.state.v, invMJtlambda[1][0]);   
 }
 
 
@@ -586,7 +598,7 @@ function WheelConstraints(body, pos, axis)
     J[0] = [ new Frame( axis.x,  axis.y,  crossVV(pos, axis) )];
 
     // compute vels--------------
-    var vel = [[ body.v ]];
+    var vel = [[ body.state.v ]];
     var velT = TransposeMat(vel);
 
     //just the diagonal matrix -----
@@ -600,15 +612,22 @@ function WheelConstraints(body, pos, axis)
     var invMJtlambda = GetMinvJtlambda(invM, J, lambda);       
     
     // update speeds-----------------
-    body.v = addF(body.v, invMJtlambda[0][0]);
+    body.state.v = addF(body.state.v, invMJtlambda[0][0]);
+}
+
+function vehicleCreate(pos)
+{
+    var r = 1;
+    var boxVerts = [ new Vector(-r, -r/2), new Vector(r, -r/2), new Vector(r, r/2), new Vector(-r, r/2)];
+    return CreateState(pos.x ,pos.y, DegToRad(0),boxVerts,1,1);
 }
 
 function vehicleForce(body, wheelAngle, accelCar)
 {
-    var p1 = RotV(body.p.r, new Vector(-.7,0))
-    var f = RotV(body.p.r, new Vector(accelCar,0))
+    var p1 = RotV(body.state.p.r, new Vector(-.7,0))
+    var f = RotV(body.state.p.r, new Vector(accelCar,0))
     
-    ApplyForceF(body, addV(body.p, p1), f);
+    ApplyForceF(body.state, addV(body.state.p, p1), f);
     //drawNormal( addV(body.p,p1), addV(body.p,addV(p1,f)), "#ff0000",1);
 }
 
@@ -629,25 +648,25 @@ function vehicleDrawWheel(pos, wheelAngle)
 
 function vehicleDraw(body, wheelAngle)
 {
-    vehicleDrawWheel(TransFV(body.p,new Vector(.7,.4)), body.p.r + wheelAngle);
-    vehicleDrawWheel(TransFV(body.p,new Vector(.7,-.4)), body.p.r + wheelAngle);
-    vehicleDrawWheel(TransFV(body.p,new Vector(-.7,.4)), body.p.r );
-    vehicleDrawWheel(TransFV(body.p,new Vector(-.7,-.4)), body.p.r );
+    vehicleDrawWheel(TransFV(body.state.p,new Vector(.7,.4)), body.state.p.r + wheelAngle);
+    vehicleDrawWheel(TransFV(body.state.p,new Vector(.7,-.4)), body.state.p.r + wheelAngle);
+    vehicleDrawWheel(TransFV(body.state.p,new Vector(-.7,.4)), body.state.p.r );
+    vehicleDrawWheel(TransFV(body.state.p,new Vector(-.7,-.4)), body.state.p.r );
     
-    vehicleDrawWheel(TransFV(body.p,new Vector(.25,0)), body.p.r + DegToRad(90) );
+    vehicleDrawWheel(TransFV(body.state.p,new Vector(.25,0)), body.state.p.r + DegToRad(90) );
 }
 
 function vehicleConstraint(body, wheelAngle)
 {
     // rear wheel
-    var p1 = RotV(body.p.r, new Vector(-.7,0))
-    var p2 = RotV(body.p.r, new Vector(0,-1))
+    var p1 = RotV(body.state.p.r, new Vector(-.7,0))
+    var p2 = RotV(body.state.p.r, new Vector(0,-1))
     WheelConstraints(body, p1, p2)
     //drawNormal( addV(body.p,p1), addV(body.p,addV(p1,ortoV(p2))), "#ff0000",1);
 
     // front wheel
-    var p1 = RotV(body.p.r, new Vector(.7,0))
-    var p2 = RotV(body.p.r, RotV(wheelAngle, new Vector(0,-1)))
+    var p1 = RotV(body.state.p.r, new Vector(.7,0))
+    var p2 = RotV(body.state.p.r, RotV(wheelAngle, new Vector(0,-1)))
     WheelConstraints(body, p1, p2)
     //drawNormal( addV(body.p,p1), addV(body.p,addV(p1,ortoV(p2))), "#ff0000",1);
 }
@@ -756,7 +775,7 @@ function ComputeBoxBoxContacts(s1,s2)
                 {
                     var jj = j+1; if (jj >= s2.rb.length) jj = 0;
 
-                    if (SegmentIntersection(s1.p, s1.rb[i], s2.rb[j], s2.rb[jj]))
+                    if (SegmentIntersection(s1.state.p, s1.rb[i], s2.rb[j], s2.rb[jj]))
                     {
                         var pt = ProjectPointToLine(s1.rb[i], s2.rb[j], s2.rb[jj]);
                         var normal = ortoV(subV(s2.rb[j], s2.rb[jj]));
@@ -852,13 +871,21 @@ function integrate()
     for(var i=0;i<States.length;i++)
     {
         States[i].p = addF(States[i].p , mulFK(States[i].v, intergrationStep));
-
-        for(var j=0;j<States[i].b.length;j++)
+    }
+    
+    for(var i=0;i<Bodies.length;i++)
+    {
+        for(var j=0;j<Bodies[i].b.length;j++)
         {
-            States[i].rb[j] = TransFV(States[i].p, States[i].b[j]);
+            Bodies[i].rb[j] = TransFV(Bodies[i].state.p, Bodies[i].b[j]);
         }
     }
 }
+
+function serialize(State)
+{
+}
+
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -875,21 +902,21 @@ function SimulationLoop()
 
     // Compute collisions
     //
-    for(var j=0;j<States.length;j++)
+    for(var j=0;j<Bodies.length;j++)
     {
         for(var i=0;i<j;i++)
         {
             //  if both objects are static don't check collisions
-            if (States[i].M==0 && States[j].M==0)
+            if (Bodies[i].M==0 && Bodies[j].M==0)
                 continue
-            ComputeContacts(States[i],States[j])
+            ComputeContacts(Bodies[i],Bodies[j])
         }
     }
 
     // apply forces (gravity)
     //
-//    for(var i=0;i<States.length;i++)
-//        States[i].v.y += (9.8* intergrationStep) * States[i].M;
+//    for(var i=0;i<Bodies.length;i++)
+//        Bodies[i].v.y += (9.8* intergrationStep) * Bodies[i].M;
 
     wheelAngle*=.99;
     accelCar*=.98;    
@@ -907,14 +934,14 @@ function SimulationLoop()
     // When an object is picked add a springy (k*distance) force between the mouse and the object
     if (pickedObject>=0)
     {
-        var state = States[pickedObject];
-        var p = TransFV(state.p, pickedPoint);
+        var body = Bodies[pickedObject];
+        var p = TransFV(body.state.p, pickedPoint);
         var distance = subV(mousePosition, p);
         var force  = mulV(distance, 0.1);
-        ApplyForceF(state, p, force);
+        ApplyForceF(body.state, p, force);
     }
 
-    vehicleForce(States[0], wheelAngle, accelCar);
+    vehicleForce(Bodies[0], wheelAngle, accelCar);
 
     for(var i=0;i<Contacts.length;i++)
     {
@@ -936,7 +963,7 @@ function SimulationLoop()
             FrictionConstraints(Contacts[i], lambdaNormal);
         }
         
-        vehicleConstraint(States[0], wheelAngle);
+        vehicleConstraint(Bodies[0], wheelAngle);
     }
 
     // compute tentative velocities
@@ -950,21 +977,21 @@ function SimulationLoop()
 
         if (pickedObject>=0)
         {
-            var state = States[pickedObject];
-            var p = TransFV(state.p, pickedPoint);
+            var body = Bodies[pickedObject];
+            var p = TransFV(body.state.p, pickedPoint);
             drawLine(p, mousePosition, "#000080")
         }
 
-        for(var i=0;i<States.length;i++)
+        for(var i=0;i<Bodies.length;i++)
         {
-            if (States[i].b.length>1)
-                drawPoly(States[i], "#000000");
+            if (Bodies[i].b.length>1)
+                drawPoly(Bodies[i], "#000000");
             else 
-                drawDisc(States[i], "#000000");
-            //drawCross(States[i].p, .1, "#000080")
+                drawDisc(Bodies[i], "#000000");
+            //drawCross(Bodies[i].p, .1, "#000080")
         }
 
-        vehicleDraw(States[0], wheelAngle);
+        vehicleDraw(Bodies[0], wheelAngle);
 
         if (showNormals)
         {
@@ -1012,7 +1039,7 @@ function init()
 {
     context = myCanvas.getContext('2d');
 
-    States = []
+    Bodies = []
     Links = []
 
     window.addEventListener('keyup', function(event) { Key.onKeyup(event); }, false);
@@ -1021,11 +1048,9 @@ function init()
     //
     // Create scene
     //
+    vehicleCreate( new Vector(10 ,10-2.8))
 
-    var r = 1;
-    var boxVerts = [ new Vector(-r, -r/2), new Vector(r, -r/2), new Vector(r, r/2), new Vector(-r, r/2)];
-    CreateState(10 ,10-2.8*r, DegToRad(0),boxVerts,1,1);
-
+    //vehicleCreate( new Vector(5 ,10-2.8))
 
     // create top hook
     //
@@ -1041,8 +1066,8 @@ function init()
         var l = Math.sqrt(.5)
         CreateState(10+i*l + l*.5,1+i*l + l*.5, DegToRad(-45),linkVerts,1,1);
 
-        b1 = States[i];
-        b2 = States[i+1]
+        b1 = Bodies[i];
+        b2 = Bodies[i+1]
         Links.push( new Link(b1, b1.b[3], b2, b2.b[0]));
     }
 
@@ -1091,12 +1116,12 @@ function onMouseUp(event)
 
 function onMouseDown(event)
 {
-    for(var i=0;i<States.length;i++)
+    for(var i=0;i<Bodies.length;i++)
     {
-        if (States[i].M>0 && PointInPoly(mousePosition, States[i].rb))
+        if (Bodies[i].M>0 && PointInPoly(mousePosition, Bodies[i].rb))
         {
             pickedObject = i;
-            pickedPoint = InvTransFV(States[i].p, mousePosition);
+            pickedPoint = InvTransFV(Bodies[i].state.p, mousePosition);
             return;
         }
     }

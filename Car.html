@@ -18,7 +18,7 @@ h1 { display:block; width:800px; margin:20px auto; paddVing-bottom:20px; font:no
 #myCanvas { background:#fff; border:1px solid #cbcbcb; }
 </style>
 <script type="text/javascript">
-
+'use strict';
 var PI = 3.14159265359;
 function DegToRad(a) {return a*PI/180.0 }
 function max(a,b) { return a>b?a:b; }
@@ -59,8 +59,8 @@ function ApplyForceF(f, point, force)
 // velocities, positions and radius
 function State(pos, vel) { this.p = pos; this.v = vel; }
 function Body(state, body, invMass, invI) { this.state = state; this.b = body; this.rb = []; this.M=invMass; this.I = invI;  }
-function getVelS(f, p)        { return addV( f.v, crossKV( f.v.r, subV(p,f.p) ) ); }
-function getPosS(f, p)        { return TransFV( f.p, p ); }
+function getVelS(f, p)   { return addV( f.v, crossKV( f.v.r, subV(p,f.p) ) ); }
+function getPosS(f, p)   { return TransFV( f.p, p ); }
 
 function Link(b1, p1, b2, p2)
 {
@@ -79,13 +79,13 @@ var Contacts = []
 var Links = [];
 var States = [];
 var Bodies = [];
-var intergrationStep = 1./(24*6);
+var constraintIterations = 4;
+var intergrationStep = 1.0/30.0;
 var CoefficientOfRestitution = .1;
 var RestitutionCoefficient = 1;
 var frictionCoefficient = .006;
-var frictionWheelCoefficient = .006;
+var frictionWheelCoefficient = .004;
 var showNormals = null;
-
 var mousePosition = new Vector(0,0);
 var context;
 
@@ -103,6 +103,24 @@ function CreateState(px, py, rot, geom, invMass, invI)
     return body;
 }
 
+function CreateStateStatic(geom)
+{
+    var cm = new Vector(0,0)
+    for(var i=0;i<geom.length;i++)
+    {
+        cm = addV(cm, geom[i])
+    }
+    cm = mulV(cm, 1.0/geom.length)
+    
+    var g=[]
+    for(var i=0;i<geom.length;i++)
+    {
+        g.push(subV(geom[i], cm))
+    }
+
+    CreateState(cm.x, cm.y, 0, g, 0, 0);
+}
+
 function serializeState(state)
 {
     var out = '"px":'+state.p.x+","+'"py":'+state.p.y+","+'"pr":'+state.p.r+","+
@@ -114,7 +132,8 @@ function serializeState(state)
 //                                               Drawing helpers
 //
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-function scaleCanvas(canvas, context, width, height) {
+function scaleCanvas(canvas, context, width, height) 
+{
   // assume the device pixel ratio is 1 if the browser doesn't specify it
   const devicePixelRatio = window.devicePixelRatio || 1;
 
@@ -151,14 +170,16 @@ function scaleCanvas(canvas, context, width, height) {
   context.scale(ratio, ratio);
 }
 
-function moveTo(p) { context.moveTo(p.x*30,p.y*30); }
-function lineTo(p) { context.lineTo(p.x*30,p.y*30); }
-function circle(p) { context.arc(p.x*30,p.y*30, 30, 0, 2*Math.PI, false);  }
+var canvasScale = 20.0;
+function moveTo(p) { context.moveTo(p.x*canvasScale,p.y*canvasScale); }
+function lineTo(p) { context.lineTo(p.x*canvasScale,p.y*canvasScale); }
+function circle(p) { context.arc(p.x*canvasScale,p.y*canvasScale, canvasScale, 0, 2*Math.PI, false);  }
 
 function drawLine( p1,p2, color)
 {
     context.beginPath();
     context.strokeStyle=(color==null)?"#000000":color;
+    context.lineWidth = 1;
     moveTo(p1)
     lineTo(p2)
     context.stroke();
@@ -174,6 +195,7 @@ function drawPoly(state, color)
 {
     context.beginPath();
     context.strokeStyle=(color==null)?"#000000":color;
+    context.lineWidth = 1;
     moveTo(state.rb[0])
     for(var i=1;i<state.b.length;i++)
         lineTo(state.rb[i])
@@ -197,9 +219,9 @@ function drawDisc(state, color)
 
 function drawNormal( p1,p2, col, r)
 {
-    n = subV(p2,p1);
-    l = lengthV(n);
-    n = mulV(n,1/l)
+    var n = subV(p2,p1);
+    var l = lengthV(n);
+    var n = mulV(n,1/l)
 
     if (r!=undefined)
     {
@@ -209,8 +231,8 @@ function drawNormal( p1,p2, col, r)
 
     drawLine( p1,p2, col);
 
-    nn = mulV(n,l*.8);
-    nf = mulV(n,l*.08);
+    var nn = mulV(n,l*.8);
+    var nf = mulV(n,l*.08);
 
     drawLine( addV(p1, addV(nn, ortoV(nf))) ,p2, col)
     drawLine( addV(p1, addV(nn, mulV(ortoV(nf),-1))) ,p2, col)
@@ -525,7 +547,7 @@ function DistanceConstraint(link)
 //
 function InequalityConstraints(pair)
 {
-    normal = mulV(pair.n1, 1/lengthV(pair.n1));
+    var normal = mulV(pair.n1, 1/lengthV(pair.n1));
 
     // compute bias---------------
     var betaoverh = (.5/intergrationStep);
@@ -556,7 +578,7 @@ function InequalityConstraints(pair)
     {
         lambda = [[pair.lambdaAcc[0][0] + lambda[0][0]]];
         
-        lambdaPositive = [[ Math.max(lambda[0][0], 0) ]];
+        var lambdaPositive = [[ Math.max(lambda[0][0], 0) ]];
         
         lambda = [[lambdaPositive[0][0] - pair.lambdaAcc[0][0] ]];
         
@@ -584,7 +606,7 @@ function InequalityConstraints(pair)
 //
 function FrictionConstraints(pair, lambdaNormal)
 {
-    normal = mulV(pair.n1, 1/lengthV(pair.n1));
+    var normal = mulV(pair.n1, 1/lengthV(pair.n1));
     var tangent = mulV(ortoV(normal),1);
 
     // compute bias---------------
@@ -644,70 +666,174 @@ function WheelConstraints(body, pos, axis)
     // solver-----------------------
     var lambda = GetLambda(J, invM, velT, bias);
     
-    lambda = [[ clamp(lambda[0][0], lambda[0][0] * frictionWheelCoefficient) ]]
-    
-    var invMJtlambda = GetMinvJtlambda(invM, J, lambda);       
+    var clampedLambda = clamp(lambda[0][0], lambda[0][0] * frictionWheelCoefficient);
+
+    var invMJtlambda = GetMinvJtlambda(invM, J, [[ clampedLambda ]]);       
     
     // update speeds-----------------
     body.state.v = addF(body.state.v, invMJtlambda[0][0]);
+
+    return invMJtlambda[0][0]
 }
 
-function vehicleCreate(pos)
-{
-    var r = 1;
-    var boxVerts = [ new Vector(-r, -r/2), new Vector(r, -r/2), new Vector(r, r/2), new Vector(-r, r/2)];
-    return CreateState(pos.x ,pos.y, DegToRad(0),boxVerts,1,1);
-}
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//
+//                                               vehicle
+//
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-function vehicleForce(body, wheelAngle, accelCar)
+function drawTrail(trails)
 {
-    var p1 = RotV(body.state.p.r, new Vector(-.7,0))
-    var f = RotV(body.state.p.r, new Vector(accelCar,0))
-    
-    ApplyForceF(body.state, addV(body.state.p, p1), f);
-    //drawNormal( addV(body.p,p1), addV(body.p,addV(p1,f)), "#ff0000",1);
-}
-
-function vehicleDrawWheel(pos, wheelAngle)
-{
-    var wallVerts = [ new Vector(-.2, -.1), new Vector(.2, -.1), new Vector(.2, .1), new Vector(-.2, .1)];
+    if (trails.length<1)
+        return;
 
     context.beginPath();
-    context.strokeStyle="#000000";
-    moveTo(addV(pos, RotV(wheelAngle, wallVerts[0])))
-    for(var i=1;i<4;i++)
-    {        
-        lineTo(addV(pos, RotV(wheelAngle, wallVerts[i])))
-    }
-    context.closePath();
+    context.strokeStyle = "#e0e0e0";
+    context.lineWidth = 5;
+    moveTo(trails[0])
+    for(var i=0;i<trails.length;i+=1)
+    {                
+        lineTo(trails[i])
+    }    
     context.stroke();
 }
 
-function vehicleDraw(body, wheelAngle)
+class Vehicle
 {
-    vehicleDrawWheel(TransFV(body.state.p,new Vector(.7,.4)), body.state.p.r + wheelAngle);
-    vehicleDrawWheel(TransFV(body.state.p,new Vector(.7,-.4)), body.state.p.r + wheelAngle);
-    vehicleDrawWheel(TransFV(body.state.p,new Vector(-.7,.4)), body.state.p.r );
-    vehicleDrawWheel(TransFV(body.state.p,new Vector(-.7,-.4)), body.state.p.r );
+    constructor()
+    {
+        this.trailList = []
+        this.trail = []
+        for(var i=0;i<4;i++)
+            this.trail.push([])
+
+        this.wheelAngle = 0
+        this.accelCar = 0;
+
+        this.rearWheelVelCorr = new Frame(0, 0, 0);
+        this.frontWheelVelCorr = new Frame(0, 0, 0);
+    }
+       
+    Create(pos, angle)
+    {
+        var r = 1;
+        var boxVerts = [ new Vector(-r, -r/2), new Vector(r, -r/2), new Vector(r, r/2), new Vector(-r, r/2)];
+        this.body = CreateState(pos.x ,pos.y, angle,boxVerts,1,1);
+        return this.body;
+    }
+
+    ApplyForce()
+    {
+        var p = this.body.state.p;
+        var p1 = RotV(p.r, new Vector(-.7,0))
+        var f = RotV(p.r, new Vector(this.accelCar,0))
     
-    vehicleDrawWheel(TransFV(body.state.p,new Vector(.25,0)), body.state.p.r + DegToRad(90) );
+        ApplyForceF(this.body.state, addV(p, p1), f);
+        //drawNormal( addV(body.p,p1), addV(body.p,addV(p1,f)), "#ff0000",1);
+    }
+
+    DrawWheel(wheelPos, wheelAngle)
+    {
+        //wheelPos = TransFV(this.body.state.p, wheelPos);
+        //wheelAngle = this.body.state.p.r + wheelAngle;
+
+        var wheelVerts = [ new Vector(-.2, -.1), new Vector(.2, -.1), new Vector(.2, .1), new Vector(-.2, .1)];
+
+        context.beginPath();
+        context.strokeStyle="#000000";
+        context.lineWidth = 1;
+        moveTo(addV(wheelPos, RotV(wheelAngle, wheelVerts[0])))
+        for(var i=1;i<4;i++)
+        {        
+            lineTo(addV(wheelPos, RotV(wheelAngle, wheelVerts[i])))
+        }
+        context.closePath();
+        context.stroke();
+    }
+
+    ComputeTrails()
+    {
+    }
+
+    Draw()
+    {
+        var p = this.body.state.p;        
+
+        var wheelPos   = [new Vector( .7, .4), new Vector( .7,-.4), new Vector(-.7, .4), new Vector(-.7,-.4)]
+        var wheelAngle = [this.wheelAngle, this.wheelAngle, 0, 0]
+
+        // compute wheel trails
+        //
+        for(var i=0;i<4;i++)
+        {
+            var wheelPosWS   = TransFV(p, wheelPos[i]);
+            var wheelAngleWS = this.body.state.p.r + wheelAngle[i];
+
+            // calc trails
+            var wheelVelWS = getVelS(this.body.state, wheelPosWS);
+            var wheelDirWS = RotV(wheelAngleWS, new Vector(0,1))      
+            var vt = dotV(wheelVelWS,wheelDirWS);
+            if (Math.abs(vt)>0.5)
+            {
+                this.trail[i].push(wheelPosWS)
+            }
+            else
+            {
+                if (this.trail[i].length>0)
+                {
+                    this.trailList.push(this.trail[i])
+                    this.trail[i] = []
+                }
+            }
+
+            // Draw wheel axis
+            //drawNormal( wheelPosWS, addV(wheelPosWS, wheelDirWS), "#ff0000",2);
+            //drawNormal( wheelPosWS, addV(wheelPosWS, wheelVelWS), "#00ff00",2);
+            //context.fillText("Hello World " + vt , 10, 50+i*20); 
+        }
+
+        // draw trails
+        for(var i=0;i<this.trailList.length;i++)
+            drawTrail(this.trailList[i])
+        for(var i=0;i<4;i++)
+            drawTrail(this.trail[i])
+
+        // draw wheels
+        for(var i=0;i<4;i++)
+        {
+            var wheelPosWS   = TransFV(p, wheelPos[i]);
+            var wheelAngleWS = this.body.state.p.r + wheelAngle[i];
+
+            // draw wheel
+            this.DrawWheel(wheelPosWS, wheelAngleWS);
+        }
+
+        // draw wind shield
+        this.DrawWheel(TransFV(p, new Vector(.25,0)), this.body.state.p.r + DegToRad(90) );
+
+    }
+
+    ApplyWheelConstraints()
+    {
+        var p = this.body.state.p;
+
+        // rear wheel
+        {
+            var p1 = RotV(p.r, new Vector(-.7,0))
+            var p2 = RotV(p.r, new Vector(0,-1))
+            WheelConstraints(this.body, p1, p2)
+            //drawNormal( addV(p,p1), addV(p,addV(p1,ortoV(p2))), "#ff0000",2);
+        }
+
+        // front wheel
+        {
+            var p1 = RotV(p.r, new Vector(.7,0))
+            var p2 = RotV(p.r, RotV(this.wheelAngle, new Vector(0,-1)))
+            WheelConstraints(this.body, p1, p2)
+            //drawNormal( addV(p,p1), addV(p,addV(p1,ortoV(p2))), "#ff0000",2);
+        }
+    }
 }
-
-function vehicleConstraint(body, wheelAngle)
-{
-    // rear wheel
-    var p1 = RotV(body.state.p.r, new Vector(-.7,0))
-    var p2 = RotV(body.state.p.r, new Vector(0,-1))
-    WheelConstraints(body, p1, p2)
-    //drawNormal( addV(body.p,p1), addV(body.p,addV(p1,ortoV(p2))), "#ff0000",1);
-
-    // front wheel
-    var p1 = RotV(body.state.p.r, new Vector(.7,0))
-    var p2 = RotV(body.state.p.r, RotV(wheelAngle, new Vector(0,-1)))
-    WheelConstraints(body, p1, p2)
-    //drawNormal( addV(body.p,p1), addV(body.p,addV(p1,ortoV(p2))), "#ff0000",1);
-}
-
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -738,8 +864,7 @@ function SegmentIntersection( a, b, c, d)
 // Determine if a point is inside of a convex poligon
 //
 function PointInPoly(point, lines)
-{
-    
+{   
     if (lines.length==1)
     {
         //it is a disc
@@ -776,23 +901,23 @@ function PointInPoly(point, lines)
 //
 function ProjectPointToLine(p, a,b)
 {
-    ab = subV(b, a);
+    var ab  = subV(b, a);
     var abn = mulV(ab,1/lengthV(ab));
-    ap = subV(p, a);
-    pr = dotV(abn, ap)
-    pt = addV( a, mulV(abn,pr))
+    var ap  = subV(p, a);
+    var pr  = dotV(abn, ap)
+    var pt  = addV( a, mulV(abn,pr))
     return pt;
 }
 
 function ClosesPointToSegment(p, a,b)
 {
-    ab = subV(b, a);
-    var l = lengthV(ab)
+    var ab  = subV(b, a);
+    var l   = lengthV(ab)
     var abn = mulV(ab,1/l);
-    ap = subV(p, a);
-    pr = dotV(abn, ap)
+    var ap  = subV(p, a);
+    var pr  = dotV(abn, ap)
  
-   if (pr<0) return a;
+    if (pr<0) return a;
     if (pr>l) return b;
     
     return addV(mulV(abn,pr),a);
@@ -859,7 +984,7 @@ function ComputeDiscBoxContacts(d,s)
 
 function ComputeDiscDiscContacts(d1,d2)
 {
-    n = subV(d1.p, d2.p);
+    var n = subV(d1.p, d2.p);
     var dist = lengthV(n)
     if (dist<2)
     {
@@ -869,7 +994,6 @@ function ComputeDiscDiscContacts(d1,d2)
         Contacts.push(new Contact(d1,d2, p1, normal, p2));
     }
 }
-
 
 //
 // Given two bodies compute collisions and penetrations
@@ -923,19 +1047,39 @@ function serialize(State)
 {
 }
 
-
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
 //                                               Simulation loop
 //
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+var car = new Vehicle();
 
-var wheelAngle = 0.4
-var accelCar = 0;
-function SimulationLoop()
+function ApplyForces()
+{
+    car.accelCar = 0;    
+    car.wheelAngle *= 0.99;
+    if (Key.isDown(Key.UP)) car.accelCar = .007;  
+    if (Key.isDown(Key.DOWN)) car.accelCar = -.007;    
+    if (Key.isDown(Key.RIGHT)) car.wheelAngle += .01;
+    if (Key.isDown(Key.LEFT)) car.wheelAngle -= .01;
+    car.accelCar = clamp(car.accelCar, .01)
+
+    car.ApplyForce(car.wheelAngle, car.accelCar);
+
+    // When an object is picked add a springy (k*distance) force between the mouse and the object
+    if (pickedObject>=0)
+    {
+        var body = Bodies[pickedObject];
+        var p = TransFV(body.state.p, pickedPoint);
+        var distance = subV(mousePosition, p);
+        var force  = mulV(distance, 0.1);
+        ApplyForceF(body.state, p, force);
+    }
+}
+
+function PhysicsLoop()
 {
     Contacts = []
-        context.clearRect(0,0,800,600);
 
     // Compute collisions
     //
@@ -950,44 +1094,13 @@ function SimulationLoop()
         }
     }
 
-    // apply forces (gravity)
-    //
-//    for(var i=0;i<Bodies.length;i++)
-//        Bodies[i].v.y += (9.8* intergrationStep) * Bodies[i].M;
-
-    wheelAngle*=.99;
-    accelCar*=.98;    
-    var currAccelCar = accelCar;
-    if (Key.isDown(Key.UP)) 
-        accelCar += .001;
-    
-    if (Key.isDown(Key.DOWN)) 
-        accelCar -= .001;
-    
-    if (Key.isDown(Key.RIGHT)) wheelAngle += .01;
-    if (Key.isDown(Key.LEFT)) wheelAngle -= .01;
-    accelCar = clamp(accelCar, .02)
-
-    // When an object is picked add a springy (k*distance) force between the mouse and the object
-    if (pickedObject>=0)
-    {
-        var body = Bodies[pickedObject];
-        var p = TransFV(body.state.p, pickedPoint);
-        var distance = subV(mousePosition, p);
-        var force  = mulV(distance, 0.1);
-        ApplyForceF(body.state, p, force);
-    }
-
-    vehicleForce(Bodies[0], wheelAngle, accelCar);
-
     for(var i=0;i<Contacts.length;i++)
     {
         Contacts[i].lambdaAcc = [[0]];
     }
 
     // apply constraints
-    var iterations = 4;
-    for(var iter=0;iter<iterations;iter++)
+    for(var iter=0;iter<constraintIterations;iter++)
     {
         for(var i=0;i<Links.length;i++)
         {
@@ -1000,44 +1113,70 @@ function SimulationLoop()
             FrictionConstraints(Contacts[i], lambdaNormal);
         }
         
-        vehicleConstraint(Bodies[0], wheelAngle);
+        car.ApplyWheelConstraints();
     }
-
-    // compute tentative velocities
-    //
 
     integrate();
+}
 
-    // render objects and collisions
+// render objects and collisions
+//
+function RenderingLoop()
+{
+    context.clearRect(0,0,800,600);
+
+    
+    context.save();
+    context.translate(578, 405);
+    context.font = '40px Arial, sans-serif';
+    context.fillStyle = "#e0e0e0";
+    context.rotate(Math.PI/4);
+    context.textAlign = "center";
+    context.fillText("START", 0, 0);
+    context.restore();
+
+    // Draw Cars
     //
+    car.Draw();
+
+    // draw mouse spring 
+    //
+    if (pickedObject>=0)
     {
+        var body = Bodies[pickedObject];
+        var p = TransFV(body.state.p, pickedPoint);
+        drawLine(p, mousePosition, "#000080")
+    }
 
-        if (pickedObject>=0)
+    // Draw bodies
+    //
+    for(var i=0;i<Bodies.length;i++)
+    {
+        if (Bodies[i].b.length>1)
+            drawPoly(Bodies[i], "#000000");
+        else 
+            drawDisc(Bodies[i], "#000000");
+        //drawCross(Bodies[i].p, .1, "#000080")
+    }
+
+
+    // Draw normals
+    //
+    if (showNormals)
+    {
+        for(var i=0;i<Contacts.length;i++)
         {
-            var body = Bodies[pickedObject];
-            var p = TransFV(body.state.p, pickedPoint);
-            drawLine(p, mousePosition, "#000080")
-        }
-
-        for(var i=0;i<Bodies.length;i++)
-        {
-            if (Bodies[i].b.length>1)
-                drawPoly(Bodies[i], "#000000");
-            else 
-                drawDisc(Bodies[i], "#000000");
-            //drawCross(Bodies[i].p, .1, "#000080")
-        }
-
-        vehicleDraw(Bodies[0], wheelAngle);
-
-        if (showNormals)
-        {
-            for(var i=0;i<Contacts.length;i++)
-            {
-                drawNormal( Contacts[i].p1, Contacts[i].p2, "#ff0000",2);
-            }
+            drawNormal( Contacts[i].p1, Contacts[i].p2, "#ff0000",2);
         }
     }
+
+}
+
+function SimulationLoop()
+{
+    ApplyForces()
+    PhysicsLoop()
+    RenderingLoop()
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1087,7 +1226,7 @@ function init()
     //
     // Create scene
     //
-    vehicleCreate( new Vector(10 ,10-2.8))
+    car.Create( new Vector(29 ,23), DegToRad(-45))
 
     //vehicleCreate( new Vector(5 ,10-2.8))
 
@@ -1121,23 +1260,38 @@ function init()
 
     // ground
     //
-    var groundVerts = [ new Vector(-10*1.333, -1), new Vector(10*1.333, -1), new Vector(10*1.333, 1), new Vector(-10*1.333, 1)];
-    CreateState(10*1.333,20, DegToRad(0),groundVerts,0,0);
-    CreateState(10*1.333,0, DegToRad(0),groundVerts,0,0);
+    var groundVerts = [ new Vector(-20, -1), new Vector(20, -1), new Vector(20, 1), new Vector(-20, 1)];
+    CreateState(20,30, DegToRad(0),groundVerts,0,0);
+    CreateState(20,0, DegToRad(0),groundVerts,0,0);
 
     // left/right wall
     //
-    var wallVerts = [ new Vector(-9, -1), new Vector(9, -1), new Vector(9, 1), new Vector(-9, 1)];
-    CreateState( 0,10, DegToRad(90),wallVerts,0,0);
-    CreateState(20*1.333,10, DegToRad(90),wallVerts,0,0);
+    var wallVerts = [ new Vector(-14, -1), new Vector(14, -1), new Vector(14, 1), new Vector(-14, 1)];
+    CreateState( 0,15, DegToRad(90),wallVerts,0,0);
+    CreateState(40,15, DegToRad(90),wallVerts,0,0);
+
+    //circuit
+    //
+    CreateStateStatic([ new Vector(34, 1), new Vector(39, 1), new Vector(39, 5)]);
+    CreateStateStatic([ new Vector(39, 15), new Vector(39, 29), new Vector(25, 29)]);
+    CreateStateStatic([ new Vector(1, 29), new Vector(1, 20), new Vector(10, 29)]);
+    CreateStateStatic([ new Vector(1, 1), new Vector(5, 1), new Vector(1, 5)]);
+    CreateStateStatic([ new Vector(11, 1), new Vector(15, 1), new Vector(15, 5)]);
+    CreateStateStatic([ new Vector(15, 1), new Vector(25, 1), new Vector(15, 10)]);    
+    CreateStateStatic([ new Vector(7, 7), new Vector(9, 7), new Vector(9, 15), new Vector(7, 15)])
+    CreateStateStatic([ new Vector(13, 17), new Vector(18, 17), new Vector(22, 22), new Vector(13, 22)]);   
+    CreateStateStatic([ new Vector(7, 15), new Vector(9, 15), new Vector(13, 17), new Vector(13, 22), new Vector(7, 16)]);       
+    CreateStateStatic([ new Vector(18, 17), new Vector(28.5, 7), new Vector(30.5, 7), new Vector(32.5, 9), new Vector(32.5, 12), new Vector(22, 22)]);   
+
 
     // create stack
     //
-    var r = 1;
+    
+    var r = .2;
     var boxVerts = [ new Vector(-r, -r), new Vector(r, -r), new Vector(r, r), new Vector(-r, r)];
     for(var j=0;j<6;j++)
-        CreateState(6 ,17-2.8*r*j, DegToRad(0*j*10),boxVerts,1,1);
-
+        CreateState(13.5+4*r*j ,16.5, 0,boxVerts,1,1);
+    
 //
 
 }
@@ -1170,12 +1324,12 @@ function onMouseDown(event)
 function onMouseMove(event)
 {
     var rect = myCanvas.getBoundingClientRect();
-    mousePosition.x = (event.clientX - rect.left) / 30;
-    mousePosition.y = (event.clientY - rect.top ) / 30;
+    mousePosition.x = (event.clientX - rect.left) / canvasScale;
+    mousePosition.y = (event.clientY - rect.top ) / canvasScale;
 }
 </script>
 </head>
-<body onload="init();setInterval(SimulationLoop,5); ">
+<body onload="init();setInterval(SimulationLoop, intergrationStep); ">
 <h1>Rigid body simulator featuring a car</h3>
 <div id="container">
 <canvas id="myCanvas" width="800" height="600" onkeypress="onkeypress(event)" onmouseup="onMouseUp(event)" onmousedown="onMouseDown(event)" onmousemove="onMouseMove(event)"></canvas>
@@ -1185,10 +1339,7 @@ function onMouseMove(event)
 <h2>Intro</h2>
 Use the keyboard to drive the car.</br>
 </br>
-<h2>Contact/Questions:</h2>
- &lt;my_github_account_username&gt;@gmail.com.
-</br>
-</br>
+Contact/Questions: &lt;my_github_account_username&gt;@gmail.com.
 </div>
 </body>
 </html>

@@ -83,12 +83,12 @@ var constraintIterations = 4;
 var intergrationStep = 1.0/30.0;
 var CoefficientOfRestitution = .1;
 var RestitutionCoefficient = 1;
-var frictionCoefficient = .006;
+var frictionCoefficient = 0;
 var frictionWheelCoefficient = .004;
 var showNormals = null;
 var mousePosition = new Vector(0,0);
 var context;
-
+var myCanvas = null;
 var pickedPoint = new Vector(0,0);
 var pickedObject = -1;
 
@@ -1057,11 +1057,13 @@ var car = new Vehicle();
 function ApplyForces()
 {
     car.accelCar = 0;    
-    car.wheelAngle *= 0.99;
+    //car.wheelAngle *= 0.9;
     if (Key.isDown(Key.UP)) car.accelCar = .007;  
     if (Key.isDown(Key.DOWN)) car.accelCar = -.007;    
-    if (Key.isDown(Key.RIGHT)) car.wheelAngle += .01;
-    if (Key.isDown(Key.LEFT)) car.wheelAngle -= .01;
+    if (Key.isDown(Key.RIGHT)) car.wheelAngle += .005;
+    else if (Key.isDown(Key.LEFT)) car.wheelAngle -= .005;
+    else car.wheelAngle *= 0.9;
+    car.wheelAngle = clamp(car.wheelAngle, 0.5)
     car.accelCar = clamp(car.accelCar, .01)
 
     car.ApplyForce(car.wheelAngle, car.accelCar);

@@ -12,10 +12,15 @@
     ga('send', 'pageview');
 </script>
 <style type="text/css">
-body { background-color:#ededed; font:norm2al 12px/18px Arial, Helvetica, sans-serif; }
+body { background-color:#ededed; font:nor2mal 12px/18px Arial, Helvetica, sans-serif; }
 h1 { display:block; width:800px; margin:20px auto; paddVing-bottom:20px; font:norm2al 24px/30px Georgia, "Times New Roman", Times, serif; color:#333; text-shadow: 1px 2px 3px #ccc; border-bottom:1px solid #cbcbcb; }
 #container { width:800px; margin:0 auto; }
 #myCanvas { background:#fff; border:1px solid #cbcbcb; }
+#myCanvas
+{
+    display: block;
+    margin: 0 auto;
+}
 </style>
 <script type="text/javascript">
 'use strict';
@@ -80,18 +85,18 @@ var Links = [];
 var States = [];
 var Bodies = [];
 var constraintIterations = 4;
-var intergrationStep = 1.0/30.0;
+var intergrationStep = 1.0/55.0;
 var CoefficientOfRestitution = .1;
 var RestitutionCoefficient = 1;
 var frictionCoefficient = 0;
-var frictionWheelCoefficient = .004;
+var frictionWheelCoefficient = .04;
 var showNormals = null;
 var mousePosition = new Vector(0,0);
 var context;
 var myCanvas = null;
 var pickedPoint = new Vector(0,0);
 var pickedObject = -1;
-
+var oldTime = new Date
 function CreateState(px, py, rot, geom, invMass, invI)
 {
     var p = new Frame(px,py, rot);
@@ -132,8 +137,13 @@ function serializeState(state)
 //                                               Drawing helpers
 //
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+var canvasScale = 1;
+
 function scaleCanvas(canvas, context, width, height) 
 {
+    canvasScale = height/30
+
   // assume the device pixel ratio is 1 if the browser doesn't specify it
   const devicePixelRatio = window.devicePixelRatio || 1;
 
@@ -170,7 +180,6 @@ function scaleCanvas(canvas, context, width, height)
   context.scale(ratio, ratio);
 }
 
-var canvasScale = 20.0;
 function moveTo(p) { context.moveTo(p.x*canvasScale,p.y*canvasScale); }
 function lineTo(p) { context.lineTo(p.x*canvasScale,p.y*canvasScale); }
 function circle(p) { context.arc(p.x*canvasScale,p.y*canvasScale, canvasScale, 0, 2*Math.PI, false);  }
@@ -439,7 +448,7 @@ function invertMat(M){
       I[i][j] = I[i][j]/e; //apply to identity
     }
 
-      // subVtract this row (scaled appropriately for each row) from ALL of
+      // substract this row (scaled appropriately for each row) from ALL of
     // the other rows so that there will be 0's in this column in the
     // rows above and below this one
     for(ii=0; ii<dim; ii++){
@@ -449,7 +458,7 @@ function invertMat(M){
       // We want to change this element to 0
       e = C[ii][i];
 
-      // subVtract (the row above(or below) scaled by e) from (the
+      // substract (the row above(or below) scaled by e) from (the
       // current row) but start at the i'th column and assume all the
       // stuff left of diagonal is 0 (which it should be if we made this
       // algorithm correctly)
@@ -689,7 +698,7 @@ function drawTrail(trails)
 
     context.beginPath();
     context.strokeStyle = "#e0e0e0";
-    context.lineWidth = 5;
+    context.lineWidth = 0.2*canvasScale;
     moveTo(trails[0])
     for(var i=0;i<trails.length;i+=1)
     {                
@@ -773,7 +782,7 @@ class Vehicle
             var wheelVelWS = getVelS(this.body.state, wheelPosWS);
             var wheelDirWS = RotV(wheelAngleWS, new Vector(0,1))      
             var vt = dotV(wheelVelWS,wheelDirWS);
-            if (Math.abs(vt)>0.5)
+            if (Math.abs(vt)>2)
             {
                 this.trail[i].push(wheelPosWS)
             }
@@ -782,6 +791,9 @@ class Vehicle
                 if (this.trail[i].length>0)
                 {
                     this.trailList.push(this.trail[i])
+                    if (this.trailList.length>15)
+                        this.trailList.shift() 
+
                     this.trail[i] = []
                 }
             }
@@ -1058,13 +1070,13 @@ function ApplyForces()
 {
     car.accelCar = 0;    
     //car.wheelAngle *= 0.9;
-    if (Key.isDown(Key.UP)) car.accelCar = .007;  
-    if (Key.isDown(Key.DOWN)) car.accelCar = -.007;    
-    if (Key.isDown(Key.RIGHT)) car.wheelAngle += .005;
-    else if (Key.isDown(Key.LEFT)) car.wheelAngle -= .005;
+    if (Key.isDown(Key.UP)) car.accelCar = .1;  
+    if (Key.isDown(Key.DOWN)) car.accelCar = -.1;    
+    if (Key.isDown(Key.RIGHT)) car.wheelAngle += .03;
+    else if (Key.isDown(Key.LEFT)) car.wheelAngle -= .03;
     else car.wheelAngle *= 0.9;
     car.wheelAngle = clamp(car.wheelAngle, 0.5)
-    car.accelCar = clamp(car.accelCar, .01)
+    car.accelCar = clamp(car.accelCar, .1)
 
     car.ApplyForce(car.wheelAngle, car.accelCar);
 
@@ -1123,19 +1135,31 @@ function PhysicsLoop()
 
 // render objects and collisions
 //
+var frameCount=0;
+var fps = 0
 function RenderingLoop()
 {
     context.clearRect(0,0,800,600);
 
-    
     context.save();
-    context.translate(578, 405);
-    context.font = '40px Arial, sans-serif';
+    context.scale(canvasScale, canvasScale);
+    context.translate(30, 19);
+    context.font = '2px Arial, sans-serif';
     context.fillStyle = "#e0e0e0";
     context.rotate(Math.PI/4);
     context.textAlign = "center";
     context.fillText("START", 0, 0);
     context.restore();
+
+    var newTime = new Date()
+    var millisPerFrame = newTime - oldTime;
+    if (millisPerFrame>1000)
+    {
+	fps = frameCount
+	frameCount=0
+        oldTime = newTime
+    }
+    context.fillText(fps, 10, 10);
 
     // Draw Cars
     //
@@ -1172,6 +1196,7 @@ function RenderingLoop()
         }
     }
 
+    frameCount++;
 }
 
 function SimulationLoop()
@@ -1179,6 +1204,7 @@ function SimulationLoop()
     ApplyForces()
     PhysicsLoop()
     RenderingLoop()
+    requestAnimationFrame(SimulationLoop)
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1217,6 +1243,8 @@ function init()
 {
     myCanvas = document.getElementById('myCanvas')
     context = myCanvas.getContext('2d');
+    myCanvas.height = window.innerHeight*.80;
+    myCanvas.width = myCanvas.height*800/600;
     scaleCanvas(myCanvas, context, myCanvas.width, myCanvas.height)
 
     Bodies = []
@@ -1295,7 +1323,7 @@ function init()
         CreateState(13.5+4*r*j ,16.5, 0,boxVerts,1,1);
     
 //
-
+    requestAnimationFrame(SimulationLoop);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1331,17 +1359,13 @@ function onMouseMove(event)
 }
 </script>
 </head>
-<body onload="init();setInterval(SimulationLoop, intergrationStep); ">
-<h1>Rigid body simulator featuring a car</h3>
+<body onload="init(); ">
+<h1 style='text-align: center;'>Rigid body simulator featuring a car</h3>
 <div id="container">
+<div style='text-align: center;'>Use the cursors to drive the car.</div>
 <canvas id="myCanvas" width="800" height="600" onkeypress="onkeypress(event)" onmouseup="onMouseUp(event)" onmousedown="onMouseDown(event)" onmousemove="onMouseMove(event)"></canvas>
-<input type="button" value="Reset" onclick="init();" /><br>
-<input type="checkbox" id="chbx" onchange="showNormals = document.getElementById('chbx').checked; ">Show normals<br>
+<div id="container">
 <p id="demo"></p>
-<h2>Intro</h2>
-Use the keyboard to drive the car.</br>
-</br>
-Contact/Questions: &lt;my_github_account_username&gt;@gmail.com.
 </div>
 </body>
 </html>

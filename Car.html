@@ -89,7 +89,7 @@ var intergrationStep = 1.0/55.0;
 var CoefficientOfRestitution = .1;
 var RestitutionCoefficient = 1;
 var frictionCoefficient = 0;
-var frictionWheelCoefficient = .04;
+var frictionWheelCoefficient = .03;
 var showNormals = null;
 var mousePosition = new Vector(0,0);
 var context;
@@ -1139,7 +1139,7 @@ var frameCount=0;
 var fps = 0
 function RenderingLoop()
 {
-    context.clearRect(0,0,800,600);
+    context.clearRect(0,0,myCanvas.width,myCanvas.height);
 
     context.save();
     context.scale(canvasScale, canvasScale);
@@ -1199,12 +1199,21 @@ function RenderingLoop()
     frameCount++;
 }
 
-function SimulationLoop()
+var prev_millis = -1;
+function SimulationLoop(millis)
 {
-    ApplyForces()
-    PhysicsLoop()
-    RenderingLoop()
-    requestAnimationFrame(SimulationLoop)
+    if (prev_millis!=-1)
+    {
+        var delta_millis = millis - prev_millis
+        intergrationStep = delta_millis/1000;
+        ApplyForces()
+        PhysicsLoop()
+        RenderingLoop()   
+    }
+
+    
+    requestAnimationFrame(SimulationLoop)    
+    prev_millis = millis
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -716,6 +716,7 @@ class Vehicle
         for(var i=0;i<4;i++)
             this.trail.push([])
 
+        this.back = false;
         this.wheelAngle = 0
         this.accelCar = 0;
 
@@ -731,6 +732,28 @@ class Vehicle
         return this.body;
     }
 
+
+    ApplyForcesBasedOnControl(forward, backward, left, right)
+    {
+        this.accelCar = 0;    
+        //car.wheelAngle *= 0.9;
+        
+        this.back = false;
+        
+        if (forward)  { this.accelCar =  .1; this.back = false; } 
+        else if (backward) { this.accelCar = -.1; this.back = true; }
+        
+        
+        if (right) this.wheelAngle += .03;
+        else if (left) this.wheelAngle -= .03;
+        else this.wheelAngle *= 0.9;
+        
+        this.wheelAngle = clamp(this.wheelAngle, 0.5)
+        this.accelCar = clamp(this.accelCar, .1)
+
+        this.ApplyForce();
+    }
+    
     ApplyForce()
     {
         var p = this.body.state.p;
@@ -741,20 +764,18 @@ class Vehicle
         //drawNormal( addV(body.p,p1), addV(body.p,addV(p1,f)), "#ff0000",1);
     }
 
-    DrawWheel(wheelPos, wheelAngle)
+    DrawWheel(wheelPos, wheelAngle, vertexBuffer, color)
     {
         //wheelPos = TransFV(this.body.state.p, wheelPos);
         //wheelAngle = this.body.state.p.r + wheelAngle;
 
-        var wheelVerts = [ new Vector(-.2, -.1), new Vector(.2, -.1), new Vector(.2, .1), new Vector(-.2, .1)];
-
         context.beginPath();
-        context.strokeStyle="#000000";
+        context.strokeStyle = color;
         context.lineWidth = 1;
-        moveTo(addV(wheelPos, RotV(wheelAngle, wheelVerts[0])))
-        for(var i=1;i<4;i++)
+        moveTo(addV(wheelPos, RotV(wheelAngle, vertexBuffer[0])))
+        for(var i=1;i<vertexBuffer.length;i++)
         {        
-            lineTo(addV(wheelPos, RotV(wheelAngle, wheelVerts[i])))
+            lineTo(addV(wheelPos, RotV(wheelAngle, vertexBuffer[i])))
         }
         context.closePath();
         context.stroke();
@@ -770,6 +791,7 @@ class Vehicle
 
         var wheelPos   = [new Vector( .7, .4), new Vector( .7,-.4), new Vector(-.7, .4), new Vector(-.7,-.4)]
         var wheelAngle = [this.wheelAngle, this.wheelAngle, 0, 0]
+        var wheelVerts = [new Vector(-.2, -.1), new Vector(.2, -.1), new Vector(.2, .1), new Vector(-.2, .1)];
 
         // compute wheel trails
         //
@@ -817,11 +839,18 @@ class Vehicle
             var wheelAngleWS = this.body.state.p.r + wheelAngle[i];
 
             // draw wheel
-            this.DrawWheel(wheelPosWS, wheelAngleWS);
+            this.DrawWheel(wheelPosWS, wheelAngleWS, wheelVerts, "#000000");
         }
 
         // draw wind shield
-        this.DrawWheel(TransFV(p, new Vector(.25,0)), this.body.state.p.r + DegToRad(90) );
+        this.DrawWheel(TransFV(p, new Vector(.25,0)), this.body.state.p.r + DegToRad(90), wheelVerts, "#000000" );
+
+        if (this.back)
+        {
+            var wheelVerts = [ new Vector(0, -.1), new Vector(0, .1) ];
+            this.DrawWheel(TransFV(p, new Vector(-1.1, 0.4)), this.body.state.p.r, wheelVerts, "#FF0000" );          
+            this.DrawWheel(TransFV(p, new Vector(-1.1,-0.4)), this.body.state.p.r, wheelVerts, "#FF0000" );          
+        }
 
     }
 
@@ -1068,17 +1097,7 @@ var car = new Vehicle();
 
 function ApplyForces()
 {
-    car.accelCar = 0;    
-    //car.wheelAngle *= 0.9;
-    if (Key.isDown(Key.UP)) car.accelCar = .1;  
-    if (Key.isDown(Key.DOWN)) car.accelCar = -.1;    
-    if (Key.isDown(Key.RIGHT)) car.wheelAngle += .03;
-    else if (Key.isDown(Key.LEFT)) car.wheelAngle -= .03;
-    else car.wheelAngle *= 0.9;
-    car.wheelAngle = clamp(car.wheelAngle, 0.5)
-    car.accelCar = clamp(car.accelCar, .1)
-
-    car.ApplyForce(car.wheelAngle, car.accelCar);
+    car.ApplyForcesBasedOnControl(Key.isDown(Key.UP), Key.isDown(Key.DOWN), Key.isDown(Key.LEFT), Key.isDown(Key.RIGHT));
 
     // When an object is picked add a springy (k*distance) force between the mouse and the object
     if (pickedObject>=0)
@@ -1139,7 +1158,8 @@ var frameCount=0;
 var fps = 0
 function RenderingLoop()
 {
-    context.clearRect(0,0,800,600);
+    context.fillStyle = "gray";
+    context.fillRect(0,0,800,600);
 
     context.save();
     context.scale(canvasScale, canvasScale);

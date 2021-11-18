@@ -697,7 +697,7 @@ function drawTrail(trails)
         return;
 
     context.beginPath();
-    context.strokeStyle = "#e0e0e0";
+    context.strokeStyle = "#808080";
     context.lineWidth = 0.2*canvasScale;
     moveTo(trails[0])
     for(var i=0;i<trails.length;i+=1)
@@ -792,6 +792,8 @@ class Vehicle
         var wheelPos   = [new Vector( .7, .4), new Vector( .7,-.4), new Vector(-.7, .4), new Vector(-.7,-.4)]
         var wheelAngle = [this.wheelAngle, this.wheelAngle, 0, 0]
         var wheelVerts = [new Vector(-.2, -.1), new Vector(.2, -.1), new Vector(.2, .1), new Vector(-.2, .1)];
+        var windShieldVerts = [new Vector(-.2, -.1), new Vector(.2, -.1), new Vector(.35, .2), new Vector(-.35, .2)];
+        var backLightsVerts = [ new Vector(0, -.1), new Vector(0, .1) ];
 
         // compute wheel trails
         //
@@ -843,13 +845,12 @@ class Vehicle
         }
 
         // draw wind shield
-        this.DrawWheel(TransFV(p, new Vector(.25,0)), this.body.state.p.r + DegToRad(90), wheelVerts, "#000000" );
+        this.DrawWheel(TransFV(p, new Vector(.25,0)), this.body.state.p.r + DegToRad(90), windShieldVerts, "#000000" );
 
         if (this.back)
         {
-            var wheelVerts = [ new Vector(0, -.1), new Vector(0, .1) ];
-            this.DrawWheel(TransFV(p, new Vector(-1.1, 0.4)), this.body.state.p.r, wheelVerts, "#FF0000" );          
-            this.DrawWheel(TransFV(p, new Vector(-1.1,-0.4)), this.body.state.p.r, wheelVerts, "#FF0000" );          
+            this.DrawWheel(TransFV(p, new Vector(-1.1, 0.4)), this.body.state.p.r, backLightsVerts, "#FF0000" );          
+            this.DrawWheel(TransFV(p, new Vector(-1.1,-0.4)), this.body.state.p.r, backLightsVerts, "#FF0000" );          
         }
 
     }
@@ -1158,25 +1159,26 @@ var frameCount=0;
 var fps = 0
 function RenderingLoop()
 {
-    context.fillStyle = "gray";
+    context.fillStyle = "#d3d3d3";
     context.fillRect(0,0,myCanvas.width,myCanvas.height);
 
     context.save();
     context.scale(canvasScale, canvasScale);
     context.translate(30, 19);
     context.font = '2px Arial, sans-serif';
-    context.fillStyle = "#e0e0e0";
+    context.fillStyle = "#707070";
     context.rotate(Math.PI/4);
     context.textAlign = "center";
     context.fillText("START", 0, 0);
     context.restore();
 
+    context.fillStyle = "black";
     var newTime = new Date()
     var millisPerFrame = newTime - oldTime;
     if (millisPerFrame>1000)
     {
-	fps = frameCount
-	frameCount=0
+    	fps = frameCount
+    	frameCount=0
         oldTime = newTime
     }
     context.fillText(fps, 10, 10);
@@ -1249,17 +1251,9 @@ var Key = {
   RIGHT: 39,
   DOWN: 40,
   
-  isDown: function(keyCode) {
-    return this._pressed[keyCode];
-  },
-  
-  onKeydown: function(event) {
-    this._pressed[event.keyCode] = true;
-  },
-  
-  onKeyup: function(event) {
-    delete this._pressed[event.keyCode];
-  }
+  isDown: function(keyCode)  { return this._pressed[keyCode];        },
+  onKeydown: function(event) { this._pressed[event.keyCode] = true;  },
+  onKeyup: function(event)   { delete this._pressed[event.keyCode];  }
 };
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1267,7 +1261,6 @@ var Key = {
 //                                               init
 //
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 function init()
 {
     myCanvas = document.getElementById('myCanvas')

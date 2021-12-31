@@ -639,11 +639,11 @@ The simulation loop looks like this:</br>
 In every case we will have to:
 <ul>
 <li>Compute the Jacobian</li>
-<li>Uses a velocity bias to prevent drift/stretching (Baumgarte stabilization): $$b = \frac{\beta}{t} \cdot C$$</li>
-<li>Compute the inverse of $JM^{-1}J^T$ (this is why we want smaller jacobians).</li>
-<li>Compute lagrange multipliers (anything that multiplies a derivative that points in the direction we want is called a lagrange multiplier, this is just to scare people).</li>
+<li>Use a velocity bias to prevent drift/stretching (Baumgarte stabilization): $$b = \frac{\beta}{t} \cdot C$$</li>
+<li>Compute the inverse of $JM^{-1}J^T$ (this is why we want smaller Jacobians).</li>
+<li>Compute Lagrange multipliers (anything that multiplies a derivative that points in the direction we want is called a Lagrange multiplier, this is just to scare people).</li>
 $$\lambda = -\frac{J \cdot v_{tentative} + b}{JM^{-1}J^T}$$
-<li>And the velocity gets corrected(so it meets the constraints) by applying:</li>
+<li>And the velocity gets corrected (so it meets the constraints) by applying:</li>
 $$v_f = v_{tentative} + \lambda J^T$$
 </ul>
 <li><b>Rendering:</b> Draws particles and links.</li> 
